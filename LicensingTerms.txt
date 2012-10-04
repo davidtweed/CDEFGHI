@@ -1,0 +1,20 @@
+This code is under unusual conditions at the moment. Because I
+deliberately don't want to design, create and popularise a whole new
+language with all capabilities, the ultimate goal is to make this
+either a formal part of, or a "package" that works exceptionally well
+with a language with a wider scope (for example Julia). This language
+will definitely be in the Libre/OpenSource realm, but precisely which
+licence is used is not a vital matter in my plans for this code. Certainly to
+be incorporated into a bigger language the licence will have to be
+compatible with the larger body of code, and ideally would be
+identical with it (if only to avoid having to answer questions about
+how/why the licence differs). As such, at the moment the code is
+released under the MIT licence, but I reserve the right to re-licence
+future versions under a different licence (until it has a definite
+"home", at which point the licence will be announced as fixed).
+
+I'm very interested in contributions, but contributors should only do
+so, until the licence is fixed, on the agreement that their
+contributions may be relicenced (eg, GPL version X). It would be very
+helpful if contributors would informally make it clear that they agree
+to this when sending patches or issuing any pull requests.
