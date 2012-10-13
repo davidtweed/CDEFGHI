@@ -20,7 +20,7 @@ LinearAlloc::~LinearAlloc()
 
 void* LinearAlloc::getBlock(size_t szBytes) {
     void *p=curPos;
-    szBytes=((szBytes+aligGranularity-1)/blkSz)*blkSz;
+    szBytes=((szBytes+blkSz-1)/blkSz)*blkSz;
     curPos+=szBytes;
     if(curPos>limit){
         //error

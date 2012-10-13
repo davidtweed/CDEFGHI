@@ -10,7 +10,7 @@ createStructInSharedMemory()
 {
 
 }
-//VITAL: structure must be of constant size no matter what it holds so can "construct ptr to it" before fork()
+//VITAL: structure must be of constant size no matter what it holds so can "allocate it in shared memory" before fork()
 struct ArrayList {
     int noArrays;
     int noIdxs;
@@ -18,7 +18,7 @@ struct ArrayList {
     void** arrays;
 };
 
-//VITAL: structure must be of constant size no matter what it holds so can "construct ptr to it" before fork()
+//VITAL: structure must be of constant size no matter what it holds so can "allocate it in shared memory" before fork()
 struct ArrayIterSpec {
 
 };
