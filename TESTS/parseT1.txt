@@ -1,11 +1,12 @@
 A.ij=B.ij
 A.ikj  =   B.ijk
-A.ijg  =!  C.i
+A.ijg!  =  C.i
+A.ijg! =+ C.ij
 A.ij =+ B.ij
 A. = B.
-where A.ij => i { ## COMMENT
-A1.ij = A2.ij + B3.jk
-A.ij = B.ij + C.+D.ij+E.jk
+where A.ij => I { ## COMMENT
+A1.Ij = A2.Ij + B3.jk
+A.Ij = B.Ij + C.+D.Ij+E.jk
 A.ij = B.ij + C./D.ij*E.jk
 A.ij = B.ij + C.ij+D.ij+E.jk
 }
@@ -13,8 +14,11 @@ A.ij = B.ij + C.ij+D.ij *:T128 E.jk
 A.ij:T16 = B.ij + C.ij+D.ij *:T128 E.jk
 A.ij : T16 = B.ij + C.ij+D.ij * : T128 E.jk
 define [A B C] = f [G H I] {
-A.ij:T16 = B.ij + C.ij+D.ij *:T128 E.jk
-A.ij : T16 = B.ij + C.ij+D.ij * : T128 E.jk
+A.ij:S16 = B.ij + C.ij+D.ij *:S32 E.jk
+A.ij : U16 = B.ij + C.ij+D.ij * : U16 E.jk
 }
 [A B C] = f [G H I] ##done
 [A.ij B.i C.i] = f [G H.ij I]
+[A.ij! B.i C.i!] = f [G H.ij I]
+A.ij:U16 = B.ij + (C.ij+D.ij *:U32 E.jk)
+A.ij : U16 = B.ij + C.ij+D.ij (* : U32) E.jk

@@ -11,8 +11,8 @@ isGenAlpha c=(c>='a' && c<='z') || (c>='A' && c<='Z') || c=='_' || c=='%'
 isGenAlphaNum c=isGenAlpha c || (c>='0' && c<='9')
 
 type Type=String
--- Arr Entity IndexesString
-data ArrExp=Arr String String deriving (Eq,Show)
+-- Arr Entity IndexesString "isConceptual"
+data ArrExp=Arr String [String] Bool deriving (Eq,Show)
 -- Asgn' Basic Assignment
 data Asgn=Asgn Bool | Reduce Bool Char deriving (Eq,Show)
 -- Asgn assignment with type spec on LHS
@@ -31,10 +31,15 @@ data Stmt=Inline [ArrExp] [ArrExp]
 
 data Def=Def MacroInfo [Stmt]
 
-pBListArrExps=((pPredChar (=='[') (\_->[])) `pZOrMoreMod` (pIdxExp `raise` (:)) `pSeq`
-    (pMatchStr "]")) `raise` (reverse.fst)
+(@>):: Parser a->Parser b->Parser b
+p @> q = (p `pSeq` q) `raise` snd
+(<@):: Parser a->Parser b->Parser a
+p <@ q = (p `pSeq` q) `raise` fst
 
-pMI=(pBListArrExps `pSeq` pMatchStr "=" `pSeq` pString `pSeq` pBListArrExps)
+pBListArrExps::Bool->Parser [ArrExp]
+pBListArrExps lhs=(pChar (=='[')) @> (pNEList pEntry) <@ (pChar (==']'))
+  where pEntry=if lhs then pLHSIdxExp else pIdxExp
+pMI=((pBListArrExps True) `pSeq` pMatchStr "=" `pSeq` pString `pSeq` (pBListArrExps False))
            `raise` (\(((a,b),c),d)->MI a c d)
 
 pMacroUse=pMI `raise` (\x->MacroUse x)
@@ -64,9 +69,16 @@ allAccounted p cs=case p cs of
 
 pLine=pLineParser [pEBlk,pWhere,pDefinition,pMacroUse,pStatement]
 
+--fill in a data structure incrementally
+fillIn::(a->[b]->c)->Parser a->Parser b->Parser c
+fillIn f pA pB cs=case pA cs of
+  Nothing->Nothing
+  Just(v,cs')->Just f v b cs'' where (b,cs'')=case pB cs' of
+       Nothing->([],cs')
+       r@Just(_,_)->fromJust r
 --pWhere::Parser Stmt
-pWhere = ((pMatchStr "where") `pSeq` pIdxExp `pSeq` (pMatchStr "=>") `pSeq`  (pPredChar' isGenAlpha)
-          `pSeq` (pMatchStr "{")) `raise` (\((((a,b),c),d),e)->Where [d] b)
+pWhere = (((((pMatchStr "where") @> pIdxExp) <@ (pMatchStr "=>")) `pSeq` (pPredChar' isGenAlpha)) <@ (pMatchStr "{"))
+    `raise` (\(a,b)->Where [b] a)
 pEBlk = dropWS (pPredChar (=='}') (\_->EBlk))
 pMatchStr::String->Parser ()
 pMatchStr xs cs={-dropWS-} (if xs `isPrefixOf` cs then Just ((),drop (length xs) cs) else Nothing)
@@ -113,15 +125,17 @@ pPredChar' pred cs@(c:cs')
  |otherwise=Nothing
 
 
+--parse a string into an ArrExp identifier (everything starts off virtual)
+pIdent::Parser ArrExp
+pIdent=raise pString (\cs->Arr cs [] False)
+
 --parse an "identifier-like" string required to start with alphabetical character
 pString::Parser String
-pString=dropWS
-      ((((pPredChar isGenAlpha (\c->[c])) `pZOrMoreMod` (pPredCharUpd isGenAlphaNum (:))))
-      `raise` reverse)
+pString=pNEList (pChar isGenAlphaNum)
 
---parse a string into an ArrExp identifier
-pIdent::Parser ArrExp
-pIdent=raise pString (\cs->Arr cs "")
+pChar::(Char->Bool)->Parser Char
+pChar f (c:cs) | f c=Just(c,cs)
+pChar _ _ = Nothing
 
 pPredCharUpd::(Char->Bool)->(Char->a->a)->Parser (a->a)
 pPredCharUpd pred upd []=Nothing
@@ -129,15 +143,32 @@ pPredCharUpd pred upd cs@(c:cs')
  |pred c   =Just(upd c,cs')
  |otherwise=Nothing
 
+--parse possibly empty list
+pPEList::Parser a->Parser [a]
+pPEList p cs=Just(case p cs of
+  Nothing->([],cs)
+  Just(v,cs')->let (Just(vs,cs''))=pPEList p cs' in (v:vs,cs'')
+  )
+--parse list which must have at least one entry
+pNEList::Parser a->Parser [a]
+pNEList p cs=case p cs of
+  Nothing->Nothing
+  Just(v,cs')->let (Just(vs,cs''))=pPEList p cs' in Just(v:vs,cs'')
+
+--slotIn::Parser a->(a->b->b)->Parser b
+
 pIdxExp::Parser ArrExp
 pIdxExp=((pIdent
-     `pZOrMoreMod`
-     ((pPredChar' (=='.'))`raise` (\c v->v)))
-     `pZOrMoreMod` pIdxs)
-     `raise` (\(Arr a b)->Arr a (reverse b))
+     `pPostMod`
+     ((pPredChar' (array_index_sep==))`raise` (\c v->v)))
+     `pPostMod` pIdxs)
   where pIdxs::Parser (ArrExp->ArrExp)
-        pIdxs=(pPredCharUpd isGenAlpha (\c (Arr n i)->Arr n (c:i)))
-
+        pIdxs cs=let (Just(ids,cs'))=pPEList (pChar isGenAlphaNum) cs
+                 in Just((\(Arr n i v)->Arr n (map (\x->[x]) ids) v),cs')
+array_index_sep='.'
+conceptual_maker='!'
+pLHSIdxExp::Parser ArrExp
+pLHSIdxExp=pIdxExp `pOptPostMod` (pPredCharUpd (conceptual_maker==) (\_ (Arr a b v)->Arr a b True))
 
 pPostMod::Parser a->Parser (a->a)->Parser a
 pPostMod p q cs=case p cs of
@@ -147,9 +178,7 @@ pPostMod p q cs=case p cs of
                    Just(f,cs'')->Just (f v,cs'')
 
 pAsgnOp::Parser Asgn
-pAsgnOp=((pPredChar ('='==) (\_->Asgn True))
-        `pPostMod`
-        ((pPredCharUpd ('!'==) (\_ _->Asgn False))))
+pAsgnOp=(pPredChar ('='==) (\_->Asgn True))
         `pPostMod`
         (pPredCharUpd (`elem` "+*&|") (\c (Asgn i)->Reduce i c))
 
@@ -170,7 +199,13 @@ raise::Parser a->(a->b)->Parser b
 raise p f cs=case p cs of
   Nothing->Nothing
   Just(v,cs')->Just(f v,cs')
-
+{-
+pOptionalBracketed::Char->Char->Parser a->Parser a
+pOptionalBracketed l r p cs@(c:cs')=let bracketed=(l==c) in
+  case p (if bracketed then cs' else cs) of
+    Nothing->Nothing
+    Just(v,cs'')->if bracketed && not(r==head cs'') then
+-}
 -- type annotation is eg, ':Type128'
 pTypeAnnote::Parser Type
 pTypeAnnote = (dropWS ((pPredChar' (==':')) `pSeq` (dropWS pString))) `raise` snd
@@ -189,7 +224,7 @@ pStatement=(pSimple `pZOrMoreMod` (dropWS pBinOp)) `raise` canonicalise
        Nothing->Just(Nothing,c)
        (Just(t,c'))->Just(Just t,c')
    pSimple::Parser Stmt
-   pSimple=(pIdxExp `pSeq` pOptTy `pSeq` pAsgnOp `pSeq` pIdxExp) `raise` (\ (((e1,t),a),e2)->Cpd a t [e2,e1] [])
+   pSimple=(pLHSIdxExp `pSeq` pOptTy `pSeq` pAsgnOp `pSeq` pIdxExp) `raise` (\ (((e1,t),a),e2)->Cpd a t [e2,e1] [])
    pCombOp::Parser (Op,ArrExp)
    pCombOp=pTyBinOp `pSeq` pIdxExp
    pBinOp=pCombOp `raise` (\ (op,idExpr) (Cpd a t es os)->Cpd a t (idExpr:es) (op:os))
