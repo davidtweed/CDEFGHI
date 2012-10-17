@@ -1,3 +1,4 @@
+where A.ij=>I{
 A.ij=B.ij
 A.ikj  =   B.ijk
 A.ijg!  =  C.i

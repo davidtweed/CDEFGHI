@@ -22,14 +22,43 @@ type OptTy=Maybe Type -- optional type annoation
 data MacroInfo = MI [ArrExp] String [ArrExp] deriving (Eq,Show)
 data Stmt=Inline [ArrExp] [ArrExp]
    | Sgl ArrExp
-   | Where String ArrExp
+   | Where ArrExp String
    | EBlk
-   | Cpd Asgn OptTy [ArrExp] [Op]
+   | Cpd {-ArrExp-} Asgn OptTy [ArrExp] [Op]
    | MacroProto MacroInfo
    | MacroUse MacroInfo -- name out parameters name inparameters
    deriving (Eq,Show)
 
 data Def=Def MacroInfo [Stmt]
+
+pCons::a->Parser a
+pCons f cs=Just(f,cs)
+
+fl::Parser (a->b)->Parser a->Parser b
+fl p1 p2 cs=case p1 cs of
+  Nothing->Nothing
+  Just(f,cs')->case p2 cs' of
+       Nothing->Nothing
+       Just(v,cs'')->Just(f v,cs'')
+
+flB::Parser (Bool->b)->Parser a->Parser b
+flB p1 p2 cs=case p1 cs of
+  Nothing->Nothing
+  Just(f,cs')->case p2 cs' of
+       Nothing->Just(f False,cs')
+       Just(v,cs'')->Just(f True,cs'')
+
+flM::Parser (Maybe a->b)->Parser a->Parser b
+flM p1 p2 cs=case p1 cs of
+  Nothing->Nothing
+  Just(f,cs')->case p2 cs' of
+       Nothing->Just(f Nothing,cs')
+       Just(v,cs'')->Just(f (Just v),cs'')
+
+flL::Parser ([a]->b)->Parser a->Parser b
+flL p1 p2 cs=case p1 cs of
+  Nothing->Nothing
+  Just(f,cs')->let (Just(v,cs''))=pPEList p2 cs' in Just(f v,cs'')
 
 (@>):: Parser a->Parser b->Parser b
 p @> q = (p `pSeq` q) `raise` snd
@@ -39,8 +68,11 @@ p <@ q = (p `pSeq` q) `raise` fst
 pBListArrExps::Bool->Parser [ArrExp]
 pBListArrExps lhs=(pChar (=='[')) @> (pNEList pEntry) <@ (pChar (==']'))
   where pEntry=if lhs then pLHSIdxExp else pIdxExp
+
 pMI=((pBListArrExps True) `pSeq` pMatchStr "=" `pSeq` pString `pSeq` (pBListArrExps False))
            `raise` (\(((a,b),c),d)->MI a c d)
+
+--pMI=(pCons MI) `flL` pLHSIdxExp `fl` pString `flL` pIdxExp
 
 pMacroUse=pMI `raise` (\x->MacroUse x)
 
@@ -69,17 +101,12 @@ allAccounted p cs=case p cs of
 
 pLine=pLineParser [pEBlk,pWhere,pDefinition,pMacroUse,pStatement]
 
---fill in a data structure incrementally
-fillIn::(a->[b]->c)->Parser a->Parser b->Parser c
-fillIn f pA pB cs=case pA cs of
-  Nothing->Nothing
-  Just(v,cs')->Just f v b cs'' where (b,cs'')=case pB cs' of
-       Nothing->([],cs')
-       r@Just(_,_)->fromJust r
+pCharStr prd=(pChar prd) `raise` (\x->[x])
 --pWhere::Parser Stmt
-pWhere = (((((pMatchStr "where") @> pIdxExp) <@ (pMatchStr "=>")) `pSeq` (pPredChar' isGenAlpha)) <@ (pMatchStr "{"))
-    `raise` (\(a,b)->Where [b] a)
-pEBlk = dropWS (pPredChar (=='}') (\_->EBlk))
+pWhere=(pMatchStr "where") @> (pCons Where) `fl` pIdxExp <@ (pMatchStr "=>") `fl` (pCharStr isGenAlpha) <@ (pMatchStr "{")
+
+pEBlk = (pCons EBlk) <@ (pChar (=='}'))
+
 pMatchStr::String->Parser ()
 pMatchStr xs cs={-dropWS-} (if xs `isPrefixOf` cs then Just ((),drop (length xs) cs) else Nothing)
 isPrefixOf xs ys= xs==(take (length xs) ys)
@@ -156,19 +183,17 @@ pNEList p cs=case p cs of
   Just(v,cs')->let (Just(vs,cs''))=pPEList p cs' in Just(v:vs,cs'')
 
 --slotIn::Parser a->(a->b->b)->Parser b
+pIdxExpBase::Parser (Bool->ArrExp)
+pIdxExpBase=(pCons Arr) `fl` pString `flL` ((pPredChar' (array_index_sep==)) @> pIdxs)
+  where pIdxs=(pPEList (pChar isGenAlphaNum))
 
 pIdxExp::Parser ArrExp
-pIdxExp=((pIdent
-     `pPostMod`
-     ((pPredChar' (array_index_sep==))`raise` (\c v->v)))
-     `pPostMod` pIdxs)
-  where pIdxs::Parser (ArrExp->ArrExp)
-        pIdxs cs=let (Just(ids,cs'))=pPEList (pChar isGenAlphaNum) cs
-                 in Just((\(Arr n i v)->Arr n (map (\x->[x]) ids) v),cs')
+pIdxExp=pIdxExpBase `raise` (\f->f False)
+
 array_index_sep='.'
 conceptual_maker='!'
 pLHSIdxExp::Parser ArrExp
-pLHSIdxExp=pIdxExp `pOptPostMod` (pPredCharUpd (conceptual_maker==) (\_ (Arr a b v)->Arr a b True))
+pLHSIdxExp=pIdxExpBase `flB` (pChar (conceptual_maker==))
 
 pPostMod::Parser a->Parser (a->a)->Parser a
 pPostMod p q cs=case p cs of
@@ -208,11 +233,10 @@ pOptionalBracketed l r p cs@(c:cs')=let bracketed=(l==c) in
 -}
 -- type annotation is eg, ':Type128'
 pTypeAnnote::Parser Type
-pTypeAnnote = (dropWS ((pPredChar' (==':')) `pSeq` (dropWS pString))) `raise` snd
+pTypeAnnote = (dropWS ((pPredChar' (==':')) @> (dropWS pString)))
 
 pTyBinOp::Parser Op
-pTyBinOp = pBinOpSyms `pPostMod` (pTypeAnnote `raise` (\ty (Op op _)->Op op (Just ty)))
-  where pBinOpSyms=(pPredChar' (`elem` "+*/&|")) `raise` (\c->Op [c] Nothing)
+pTyBinOp = (pCons Op) `fl` ((pChar (`elem` "+*/&|")) `raise` (\x->[x])) `flM` pTypeAnnote
 
 --one odd syntax <-> AST mismatch: write LHS types on LHS identifier but store on the assignment operator
 
