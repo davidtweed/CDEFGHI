@@ -24,9 +24,9 @@ data Stmt=Inline [ArrExp] [ArrExp]
    | Sgl ArrExp
    | Where ArrExp String
    | EBlk
-   | Cpd {-ArrExp-} Asgn OptTy [ArrExp] [Op]
-   | MacroProto MacroInfo
-   | MacroUse MacroInfo -- name out parameters name inparameters
+   | Cpd ArrExp Asgn OptTy [ArrExp] [Op]
+   | MacroProto  [ArrExp] String [String]
+   | MacroUse  [ArrExp] String [String] -- name out parameters name inparameters
    deriving (Eq,Show)
 
 data Def=Def MacroInfo [Stmt]
@@ -69,14 +69,9 @@ pBListArrExps::Bool->Parser [ArrExp]
 pBListArrExps lhs=(pChar (=='[')) @> (pNEList pEntry) <@ (pChar (==']'))
   where pEntry=if lhs then pLHSIdxExp else pIdxExp
 
-pMI=((pBListArrExps True) `pSeq` pMatchStr "=" `pSeq` pString `pSeq` (pBListArrExps False))
-           `raise` (\(((a,b),c),d)->MI a c d)
+pMacroUse=(pCons MacroUse) `flL` pLHSIdxExp <@ pMatchStr "=" `fl` pString `flL` pString
 
---pMI=(pCons MI) `flL` pLHSIdxExp `fl` pString `flL` pIdxExp
-
-pMacroUse=pMI `raise` (\x->MacroUse x)
-
-pDefinition = ((pMatchStr "define") `pSeq` pMI `pSeq` pMatchStr "{") `raise` (\((_,y),_)->MacroProto y)
+pDefinition = (pMatchStr "define") @> (pCons MacroProto) `flL` pLHSIdxExp <@ pMatchStr "=" `fl` pString `flL` pString <@ pMatchStr "{"
 
 tryParserList :: [Parser a]-> Parser a
 tryParserList [] _ = Nothing
@@ -113,7 +108,7 @@ isPrefixOf xs ys= xs==(take (length xs) ys)
 
 fmt::Stmt->String
 fmt (Sgl a)="Single "++show a++";"
-fmt (Cpd a t as os)="Cmpd"++show a++" "++show t++" "++show as++show os++";"
+fmt (Cpd l a t as os)="Cmpd"++show l++" "++show a++" "++show t++" "++show as++show os++";"
 
 type Parser a=String->Maybe(a,String)
 
@@ -157,8 +152,11 @@ pIdent::Parser ArrExp
 pIdent=raise pString (\cs->Arr cs [] False)
 
 --parse an "identifier-like" string required to start with alphabetical character
+pNString::Parser String
+pNString=pNEList (pChar isGenAlphaNum)
+
 pString::Parser String
-pString=pNEList (pChar isGenAlphaNum)
+pString=(pPredChar isGenAlpha (\x y->(x:y))) `flL` (pChar isGenAlphaNum)
 
 pChar::(Char->Bool)->Parser Char
 pChar f (c:cs) | f c=Just(c,cs)
@@ -184,11 +182,11 @@ pNEList p cs=case p cs of
 
 --slotIn::Parser a->(a->b->b)->Parser b
 pIdxExpBase::Parser (Bool->ArrExp)
-pIdxExpBase=(pCons Arr) `fl` pString `flL` ((pPredChar' (array_index_sep==)) @> pIdxs)
-  where pIdxs=(pPEList (pChar isGenAlphaNum))
+pIdxExpBase=(pCons Arr) `fl` pString `fl` ((pPredChar' (array_index_sep==)) @> pIdxs)
+  where pIdxs=(pPEList (pCharStr isGenAlphaNum))
 
 pIdxExp::Parser ArrExp
-pIdxExp=pIdxExpBase `raise` (\f->f False)
+pIdxExp=pIdxExpBase `fl` (pCons False)
 
 array_index_sep='.'
 conceptual_maker='!'
@@ -248,12 +246,12 @@ pStatement=(pSimple `pZOrMoreMod` (dropWS pBinOp)) `raise` canonicalise
        Nothing->Just(Nothing,c)
        (Just(t,c'))->Just(Just t,c')
    pSimple::Parser Stmt
-   pSimple=(pLHSIdxExp `pSeq` pOptTy `pSeq` pAsgnOp `pSeq` pIdxExp) `raise` (\ (((e1,t),a),e2)->Cpd a t [e2,e1] [])
+   pSimple=(pLHSIdxExp `pSeq` pOptTy `pSeq` pAsgnOp `pSeq` pIdxExp) `raise` (\ (((e1,t),a),e2)->Cpd e1 a t [e2] [])
    pCombOp::Parser (Op,ArrExp)
    pCombOp=pTyBinOp `pSeq` pIdxExp
-   pBinOp=pCombOp `raise` (\ (op,idExpr) (Cpd a t es os)->Cpd a t (idExpr:es) (op:os))
+   pBinOp=pCombOp `raise` (\ (op,idExpr) (Cpd l a t es os)->Cpd l a t (idExpr:es) (op:os))
    canonicalise x@(Sgl _)=x
-   canonicalise (Cpd a t es os)=Cpd a t (reverse es) (reverse os)
+   canonicalise (Cpd l a t es os)=Cpd l a t (reverse es) (reverse os)
 
 processStrB::String->String
 processStrB=unlines.map (show.fromJust.(allAccounted pLine)).lines
@@ -269,3 +267,5 @@ processStrE=unlines.map (show.pLine).(filter (not.all isSpace) .lines)
 
 pFileE s=do j<-readFile s
             (putStr.processStrE) j
+
+pp=pFileE "TESTS/parseT1.txt"

@@ -1,4 +1,6 @@
 where A.ij=>I{
+A.1j=B.j1
+A.11=+B.1j
 A.ij=B.ij
 A.ikj  =   B.ijk
 A.ijg!  =  C.i
@@ -19,7 +21,7 @@ A.ij:S16 = B.ij + C.ij+D.ij *:S32 E.jk
 A.ij : U16 = B.ij + C.ij+D.ij * : U16 E.jk
 }
 [A B C] = f [G H I] ##done
-[A.ij B.i C.i] = f [G H.ij I]
-[A.ij! B.i C.i!] = f [G H.ij I]
+[A B C] = f [G H I]
+[A! B C!] = f [G H I]
 A.ij:U16 = B.ij + (C.ij+D.ij *:U32 E.jk)
 A.ij : U16 = B.ij + C.ij+D.ij (* : U32) E.jk
