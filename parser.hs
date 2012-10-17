@@ -13,27 +13,25 @@ isGenAlphaNum c=isGenAlpha c || (c>='0' && c<='9')
 type Type=String
 -- Arr Entity IndexesString "isConceptual"
 data ArrExp=Arr String [String] Bool deriving (Eq,Show)
--- Asgn' Basic Assignment
-data Asgn=Asgn Bool | Reduce Bool Char deriving (Eq,Show)
--- Asgn assignment with type spec on LHS
 --type Asgn=(Asgn',OptTy) -- assignment with optional LHS type
 data Op=Op String OptTy deriving (Eq,Show) -- operator with type it occurs in
 type OptTy=Maybe Type -- optional type annoation
-data MacroInfo = MI [ArrExp] String [ArrExp] deriving (Eq,Show)
 data Stmt=Inline [ArrExp] [ArrExp]
    | Sgl ArrExp
    | Where ArrExp String
    | EBlk
-   | Cpd ArrExp Asgn OptTy [ArrExp] [Op]
-   | MacroProto  [ArrExp] String [String]
-   | MacroUse  [ArrExp] String [String] -- name out parameters name inparameters
+   | Cpd ArrExp OptTy (Maybe Char) [ArrExp] [Op]
+   | MacroProto [String] String [String]
+   | MacroUse [(String,Bool)] String [String] -- name out parameters name inparameters
    deriving (Eq,Show)
-
-data Def=Def MacroInfo [Stmt]
 
 pCons::a->Parser a
 pCons f cs=Just(f,cs)
 
+--fl: "fill" slot in LHS structure, scrapping parse if nothing parsed
+--flB: fill bool slot, defaulting to False if no parse,
+--flM: fill Maybe slot, defaulting to Nothing if no parse
+--flL: fill List slot, defaulting to [] if no parse
 fl::Parser (a->b)->Parser a->Parser b
 fl p1 p2 cs=case p1 cs of
   Nothing->Nothing
@@ -69,9 +67,10 @@ pBListArrExps::Bool->Parser [ArrExp]
 pBListArrExps lhs=(pChar (=='[')) @> (pNEList pEntry) <@ (pChar (==']'))
   where pEntry=if lhs then pLHSIdxExp else pIdxExp
 
-pMacroUse=(pCons MacroUse) `flL` pLHSIdxExp <@ pMatchStr "=" `fl` pString `flL` pString
+pMacroUse=(pCons MacroUse) `flL` pLHS <@ pMatchStr "=" `fl` pString `flL` pString
+  where pLHS=(pString `raise` (,)) `flB` (pPredChar (conceptual_marker==) (\_->True))
 
-pDefinition = (pMatchStr "define") @> (pCons MacroProto) `flL` pLHSIdxExp <@ pMatchStr "=" `fl` pString `flL` pString <@ pMatchStr "{"
+pDefinition = (pMatchStr "define") @> (pCons MacroProto) `flL` pString <@ pMatchStr "=" `fl` pString `flL` pString <@ pMatchStr "{"
 
 tryParserList :: [Parser a]-> Parser a
 tryParserList [] _ = Nothing
@@ -83,10 +82,10 @@ pAnything :: Parser ()
 pAnything cs=Just((),[])
 
 pLineParser::[Parser a]-> Parser a
-pLineParser ps cs=((tryParserList ps) `pOptPostMod` pCommentToEOL) (dropWS' cs)
+pLineParser ps cs=(tryParserList ps) (dropWS' cs) --((tryParserList ps) `flB` pCommentToEOL) (dropWS' cs)
 -- a matching "to end-of-line" comment parser just returns the incoming parse-value
-pCommentToEOL :: Parser (a->a)
-pCommentToEOL = (dropWS (pMatchStr "##" `pSeq` pAnything)) `raise` (\_ v->v)
+pCommentToEOL :: Parser ()
+pCommentToEOL = (dropWS (pMatchStr "##" <@ pAnything))
 
 --to be safe we require everything on the line to have been understood to say that we've parsed the line
 allAccounted::Parser a->String->Maybe a
@@ -189,9 +188,9 @@ pIdxExp::Parser ArrExp
 pIdxExp=pIdxExpBase `fl` (pCons False)
 
 array_index_sep='.'
-conceptual_maker='!'
+conceptual_marker='!'
 pLHSIdxExp::Parser ArrExp
-pLHSIdxExp=pIdxExpBase `flB` (pChar (conceptual_maker==))
+pLHSIdxExp=pIdxExpBase `flB` (pChar (conceptual_marker==))
 
 pPostMod::Parser a->Parser (a->a)->Parser a
 pPostMod p q cs=case p cs of
@@ -200,10 +199,8 @@ pPostMod p q cs=case p cs of
                    Nothing->r
                    Just(f,cs'')->Just (f v,cs'')
 
-pAsgnOp::Parser Asgn
-pAsgnOp=(pPredChar ('='==) (\_->Asgn True))
-        `pPostMod`
-        (pPredCharUpd (`elem` "+*&|") (\c (Asgn i)->Reduce i c))
+pAsgnOp::Parser (Maybe Char)
+pAsgnOp=(pChar ('='==)) @> (pCons id) `flM` (pChar (`elem` "+*&|"))
 
 --should sequencing allow discardable whitespace between tokens
 pSeqIn::Bool->Parser a->Parser b->Parser (a,b)
@@ -246,13 +243,17 @@ pStatement=(pSimple `pZOrMoreMod` (dropWS pBinOp)) `raise` canonicalise
        Nothing->Just(Nothing,c)
        (Just(t,c'))->Just(Just t,c')
    pSimple::Parser Stmt
-   pSimple=(pLHSIdxExp `pSeq` pOptTy `pSeq` pAsgnOp `pSeq` pIdxExp) `raise` (\ (((e1,t),a),e2)->Cpd e1 a t [e2] [])
+   pSimple=(pLHSIdxExp `pSeq` pOptTy `pSeq` pAsgnOp `pSeq` pIdxExp) `raise` (\ (((e1,t),a),e2)->Cpd e1 t a [e2] [])
    pCombOp::Parser (Op,ArrExp)
    pCombOp=pTyBinOp `pSeq` pIdxExp
    pBinOp=pCombOp `raise` (\ (op,idExpr) (Cpd l a t es os)->Cpd l a t (idExpr:es) (op:os))
    canonicalise x@(Sgl _)=x
    canonicalise (Cpd l a t es os)=Cpd l a t (reverse es) (reverse os)
+{-
 
+pStatement::Parser Stmt
+pStatement=(pCons Cpd) `fl` pLHSIdxExp `flM` pTypeAnnote  `fl` pAsgnOp `flL` pIdxExp
+-}
 processStrB::String->String
 processStrB=unlines.map (show.fromJust.(allAccounted pLine)).lines
 
