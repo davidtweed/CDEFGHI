@@ -17,12 +17,13 @@ data ArrExp=Arr String [String] Bool deriving (Eq,Show)
 data Op=Op String OptTy deriving (Eq,Show) -- operator with type it occurs in
 type RHSArrExp=Either ArrExp String -- Right number
 type OptTy=Maybe Type -- optional type annoation
+data RETree = Nd RETree Op RETree | Ex RHSArrExp deriving (Eq,Show)
 data Stmt={-Inline [ArrExp] [ArrExp]
    | Sgl ArrExp
    |-}
      Where ArrExp String
    | EBlk
-   | Cpd ArrExp OptTy (Maybe Char) [(Op,RHSArrExp)]
+   | Cpd ArrExp OptTy (Maybe Char) RETree --[(Op,RHSArrExp)]
    | MacroProto [String] {-String [String]-}
    | MacroUse [(String,Bool)] String [String] -- name out parameters name inparameters
    deriving (Eq,Show)
@@ -262,11 +263,22 @@ pRHSArrExp = pEAlt pIdxExp pGenNumber
 --one odd syntax <-> AST mismatch: write LHS types on LHS identifier but store on the assignment operator
 --also need to stick a dummy operator on front of list
 pStatement::Parser Stmt
-pStatement=(pCons Cpd) `fl` pLHSIdxExp `flM` pTypeAnnote  `fl` pAsgnOp `fl` (pCombOps)
+{-
+pStatement=(pCons Cpd) `fl` pLHSIdxExp `flM` pTypeAnnote  `fl` pAsgnOp `fl` pCombOps
   where
-   pCombOp::Parser (Op,RHSArrExp)
-   pCombOp=pTyBinOp `pSeq` pRHSArrExp
-   pCombOps=(pRHSArrExp `raise` (\x->((Op "X" Nothing,x):))) `flL` pCombOp
+   pCombOps c=let r@(Just(v1,c0))=(((pCons Ex) `fl` pRHSArrExp) c) in
+            case pTyBinOp c0 of
+            Nothing->r
+            (Just(op,c1))->let (Just(v2,c2))=pCombOps c1 in Just(Nd v1 op v2,c2)
+-}
+pStatement=(pCons Cpd) `fl` pLHSIdxExp `flM` pTypeAnnote  `fl` pAsgnOp `fl` pCombOps
+  where
+   pCombOps::Parser RETree
+   pCombOps c=let r@(Just(v1,c0))=(((pCons Ex) `fl` pRHSArrExp) c) in pLTree v1 c0
+   pLTree::RETree->Parser RETree
+   pLTree t c=case pTyBinOp c of
+            Nothing->Just(t,c)
+            (Just(op,c1))->let (Just(v2,c2))=pRHSArrExp c1 in pLTree (Nd t op (Ex v2)) c2
 
 processStrB::String->String
 processStrB=unlines.map (show.fromJust.(allAccounted pLine)).lines
