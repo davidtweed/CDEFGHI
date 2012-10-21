@@ -18,9 +18,7 @@ data Op=Op String OptTy deriving (Eq,Show) -- operator with type it occurs in
 type RHSArrExp=Either ArrExp String -- Right number
 type OptTy=Maybe Type -- optional type annoation
 data RETree = Nd RETree Op RETree | Ex RHSArrExp deriving (Eq,Show)
-data Stmt={-Inline [ArrExp] [ArrExp]
-   | Sgl ArrExp
-   |-}
+data Stmt=
      Where ArrExp String
    | EBlk
    | Cpd ArrExp OptTy (Maybe Char) RETree --[(Op,RHSArrExp)]
@@ -249,7 +247,7 @@ pTypeAnnote::Parser Type
 pTypeAnnote = (dropWS ((pPredChar' (==':')) @> (dropWS pString)))
 
 pTyBinOp::Parser Op
-pTyBinOp = dropWS(pORB ((pCons Op) `fl` ((pPredChar' (`elem` "+-*/&|^2<>")) `raise` (\x->[x])) `flM` pTypeAnnote))
+pTyBinOp = dropWS(pORB ((pCons Op) `fl` (pNEList (pPredChar' (`elem` "+-*/&|^<>="))) `flM` pTypeAnnote))
 
 pEAlt::Parser a->Parser b->Parser (Either a b)
 pEAlt a b c=case a c of
@@ -263,14 +261,6 @@ pRHSArrExp = pEAlt pIdxExp pGenNumber
 --one odd syntax <-> AST mismatch: write LHS types on LHS identifier but store on the assignment operator
 --also need to stick a dummy operator on front of list
 pStatement::Parser Stmt
-{-
-pStatement=(pCons Cpd) `fl` pLHSIdxExp `flM` pTypeAnnote  `fl` pAsgnOp `fl` pCombOps
-  where
-   pCombOps c=let r@(Just(v1,c0))=(((pCons Ex) `fl` pRHSArrExp) c) in
-            case pTyBinOp c0 of
-            Nothing->r
-            (Just(op,c1))->let (Just(v2,c2))=pCombOps c1 in Just(Nd v1 op v2,c2)
--}
 pStatement=(pCons Cpd) `fl` pLHSIdxExp `flM` pTypeAnnote  `fl` pAsgnOp `fl` pCombOps
   where
    pCombOps::Parser RETree
