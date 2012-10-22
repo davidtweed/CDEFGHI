@@ -108,6 +108,22 @@ public:
     EltType type; //unless subclass specisfies real in-type == out-type
     uint32_t idxsInKids; //bitmask of indexes used in child nodes
 };
+class NumLiteral : public Exp {
+    NumLiteral(int64_t v);
+    NumLiteral(uint64_t v);
+    NumLiteral(double v);
+    ~NumLiteral();
+    Exp* childSatisfies(EPred pred,void* opaque);
+    Value* generateSpecific(GState& global);
+    void wipeSpecific();
+    void display(ostream &s);
+    union {
+        double fMem;
+        int64_t sMem;
+        uint64_t uMem;
+    };
+    int type;
+};
 class VarRec : public Exp {
 public:
     VarRec(Value* sllvmTemp,EltType stype); //used for creating dummy objects

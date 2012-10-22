@@ -1,4 +1,5 @@
-
+-- A quick prototype parser for converting array language specs into a file of C calls constructing an AST
+-- designed to be easy to experiment with/expand and designed to be replaced later
 
 import Control.Monad (liftM)
 import Data.Char
@@ -21,13 +22,15 @@ data RETree = Nd RETree Op RETree | Ex RHSArrExp deriving (Eq,Show)
 data Stmt=
      Where ArrExp String
    | EBlk
-   | Cpd ArrExp OptTy (Maybe Char) RETree --[(Op,RHSArrExp)]
-   | MacroProto [String] {-String [String]-}
-   | MacroUse [(String,Bool)] String [String] -- name out parameters name inparameters
+   | SFn ArrExp String [ArrExp]
+   | Cpd ArrExp OptTy (Maybe Char) RETree
+   | MacroProto [String] String [String]
+   | MacroUse [(String,Bool)] String [String] -- name out-parameters name in-parameters
+   | FCall String [String]
    deriving (Eq,Show)
 
-pCons::a->Parser a
-pCons f cs=Just(f,cs)
+pInit::a->Parser a
+pInit f cs=Just(f,cs)
 
 --fl: "fill" slot in LHS structure, scrapping parse if nothing parsed
 --flB: fill bool slot, defaulting to False if no parse,
@@ -83,11 +86,16 @@ pBListArrExps::Bool->Parser [ArrExp]
 pBListArrExps lhs=(pChar '[') @> (pNEList pEntry) <@ (pChar ']')
   where pEntry=if lhs then pLHSIdxExp else pIdxExp
 
-pMacroUse=(pCons MacroUse) `cSL` pLHS <@ pMatchStr "=" `fl` pString `cSL` pString
+pMacroUse=(pInit MacroUse) `cSL` pLHS <@ pMatchStr "=" `fl` pString `cSL` pString
   where pLHS=(pString `raise` (,)) `flB` ((pChar conceptual_marker) `raise` (\_->True))
         cSL=flSL pComma
 
-pDefinition = (pMatchStr "define") @> (pCons MacroProto) `cSL` pString -- <@ pMatchStr "=" `fl` pString `flL` pString <@ pMatchStr "{"
+pFCall=pMatchStr "foreign" @> (pInit FCall) `fl` pString `flL` pString
+
+
+pSFn=pMatchStr "mapFn" @> (pInit SFn) `fl` pLHSIdxExp `fl` pString `flL` pIdxExp
+
+pDefinition = (pMatchStr "define") @> (pInit MacroProto) `cSL` pString <@ pMatchStr "=" `fl` pString `flL` pString <@ pMatchStr "{"
   where cSL=flSL pComma
 tryParserList :: [Parser a]-> Parser a
 tryParserList [] _ = Nothing
@@ -111,13 +119,13 @@ allAccounted p cs=case p cs of
   Nothing->Nothing
   Just(v,r)->if all isSpace r then Just v else Nothing
 
-pLine=pLineParser [pEBlk,pWhere,{-pDefinition,-}pMacroUse,pStatement]
+pLine=pLineParser [pEBlk,pFCall,pWhere,pDefinition,pMacroUse,pStatement]
 
 pCharStr prd=(pPredChar' prd) `raise` (\x->[x])
 --pWhere::Parser Stmt
-pWhere=(pMatchStr "where") @> (pCons Where) `fl` pIdxExp <@ (pMatchStr "=>") `fl` (pCharStr isGenAlpha) <@ (pMatchStr "{")
+pWhere=(pMatchStr "where") @> (pInit Where) `fl` pIdxExp <@ (pMatchStr "=>") `fl` (pCharStr isGenAlpha) <@ (pMatchStr "{")
 
-pEBlk = (pCons EBlk) <@ (pChar '}')
+pEBlk = (pInit EBlk) <@ (pChar '}')
 
 pMatchStr::String->Parser ()
 pMatchStr xs cs={-dropWS-} (if xs `isPrefixOf` cs then Just ((),drop (length xs) cs) else Nothing)
@@ -193,11 +201,11 @@ pNEList p cs=case p cs of
 
 --slotIn::Parser a->(a->b->b)->Parser b
 pIdxExpBase::Parser (Bool->ArrExp)
-pIdxExpBase=(pCons Arr) `fl` pString `fSyntax` (pChar array_index_sep) `fl` pIdxs
+pIdxExpBase=(pInit Arr) `fl` pString `fSyntax` (pChar array_index_sep) `fl` pIdxs
   where pIdxs=(pPEList pNull (pCharStr isGenAlphaNum))
 
 pIdxExp::Parser ArrExp
-pIdxExp=pIdxExpBase `fl` (pCons False)
+pIdxExp=pIdxExpBase `fl` (pInit False)
 
 array_index_sep='.'
 conceptual_marker='!'
@@ -212,7 +220,7 @@ pPostMod p q cs=case p cs of
                    Just(f,cs'')->Just (f v,cs'')
 
 pAsgnOp::Parser (Maybe Char)
-pAsgnOp=(pChar '=') @> (pCons id) `flM` (pPredChar' (`elem` "+*&|"))
+pAsgnOp=(pChar '=') @> (pInit id) `flM` (pPredChar' (`elem` "+*&|"))
 
 --should sequencing allow discardable whitespace between tokens
 pSeqIn::Bool->Parser a->Parser b->Parser (a,b)
@@ -247,7 +255,7 @@ pTypeAnnote::Parser Type
 pTypeAnnote = (dropWS ((pPredChar' (==':')) @> (dropWS pString)))
 
 pTyBinOp::Parser Op
-pTyBinOp = dropWS(pORB ((pCons Op) `fl` (pNEList (pPredChar' (`elem` "+-*/&|^<>="))) `flM` pTypeAnnote))
+pTyBinOp = dropWS(pORB ((pInit Op) `fl` (pNEList (pPredChar' (`elem` "+-*/&|^<>="))) `flM` pTypeAnnote))
 
 pEAlt::Parser a->Parser b->Parser (Either a b)
 pEAlt a b c=case a c of
@@ -261,14 +269,26 @@ pRHSArrExp = pEAlt pIdxExp pGenNumber
 --one odd syntax <-> AST mismatch: write LHS types on LHS identifier but store on the assignment operator
 --also need to stick a dummy operator on front of list
 pStatement::Parser Stmt
-pStatement=(pCons Cpd) `fl` pLHSIdxExp `flM` pTypeAnnote  `fl` pAsgnOp `fl` pCombOps
+pStatement=(pInit Cpd) `fl` pLHSIdxExp `flM` pTypeAnnote  `fl` pAsgnOp `fl` pCombOps
   where
    pCombOps::Parser RETree
-   pCombOps c=let r@(Just(v1,c0))=(((pCons Ex) `fl` pRHSArrExp) c) in pLTree v1 c0
+   pCombOps c=let r@(Just(v1,c0))=(((pInit Ex) `fl` pRHSArrExp) c) in pLTree v1 c0
    pLTree::RETree->Parser RETree
    pLTree t c=case pTyBinOp c of
             Nothing->Just(t,c)
             (Just(op,c1))->let (Just(v2,c2))=pRHSArrExp c1 in pLTree (Nd t op (Ex v2)) c2
+
+toThreeCode::[Stmt]->[Stmt]
+toThreeCode []=[]
+toThreeCode (r@(Cpd a o ro tree):rs)
+  |otherwise=linTree tree r (toThreeCode rs)
+toThreeCode (r:rs)=r:toThreeCode rs
+
+linTree (Ex a) r rs=rs
+linTree (Nd a op b) r rs=rs
+
+writeCPP::[Stmt]->[String]
+writeCPP=map show
 
 processStrB::String->String
 processStrB=unlines.map (show.fromJust.(allAccounted pLine)).lines

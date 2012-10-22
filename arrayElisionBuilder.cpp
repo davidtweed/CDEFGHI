@@ -1,6 +1,6 @@
 #include "arrayElisionBuilder.h"
 
-#define STRINGIFY(x0 ##x
+#define STRINGIFY(x) #x
 #define panic_if(x,y) if(x) printf(STRINGIFY(__LINE__) y);abort()
 
 #define BLK(v,n) const EltType v=n<<SHIFT_AMT
@@ -220,6 +220,52 @@ VarRec::childSatisfies(EPred pred,void* opaque)
     return 0;
 }
 
+NumLiteral::NumLiteral(int64_t v) : Exp(SINT | W64)
+{
+    sMem=v;
+    type=SINT | W64;
+}
+
+NumLiteral::NumLiteral(uint64_t v) : Exp(UINT | W64)
+{
+    uMem=v;
+    type=UINT | W64;
+}
+
+NumLiteral::NumLiteral(double v) : Exp(FLOAT | W64)
+{
+    fMem=v;
+    type=FLOAT | W64;
+}
+
+NumLiteral::~NumLiteral()
+{
+
+}
+
+Exp*
+NumLiteral::childSatisfies(EPred pred,void* opaque)
+{
+    return 0;
+}
+
+Value*
+NumLiteral::generateSpecific(GState& global)
+{
+
+}
+
+void
+NumLiteral::wipeSpecific()
+{
+
+}
+
+void
+NumLiteral::display(ostream &s)
+{
+
+}
 
 UFnApp::UFnApp(ExpPtr sinput,void *sfnPtr,EltType stype) : Exp(stype)
 {
