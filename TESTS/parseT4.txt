@@ -1,4 +1,8 @@
-W.i = A.i + B.i ## probably simplest program exercising the compiler
-X.i = B.i * C.i
-Y.i = A.i - X.i
+U = 2
+V.i! = A.i * A.i ## probably simplest program exercising the compiler
+W.i! = A.i + B.i
+X.i! = B.i * C.i
+Y.i = A.i - W.i
 Z.i = X.i / Y.i
+S.i = V.i * V.i
+T.i = S.i + U

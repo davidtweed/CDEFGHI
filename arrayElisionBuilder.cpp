@@ -712,7 +712,18 @@ int main(int argc,char* argv[])
     S(VarRec);
     S(UFnApp);
     S(Combiner);
-
+#if 1
+//very simple test code
+    ExpPtr AAP(0),BAP(0),CAP(0);
+    ExpPtr UAP(new NumLiteral(double(2)));
+    ExpPtr VAP(new Combiner(MULTIPLY,FLOAT|W64,AAP,AAP));
+    ExpPtr WAP(new Combiner(ADD,FLOAT|W64,AAP,BAP));
+    ExpPtr XAP(new Combiner(MULTIPLY,FLOAT|W64,BAP,CAP));
+    ExpPtr YAP(new Combiner(SUBTRACT,FLOAT|W64,AAP,WAP));
+    ExpPtr ZAP(new Combiner(DIVIDE,FLOAT|W64,XAP,YAP));
+    ExpPtr SAP(new Combiner(MULTIPLY,FLOAT|W64,VAP,VAP));
+    ExpPtr TAP(new Combiner(ADD,FLOAT|W64,SAP,UAP));
+#endif
     return 0;
 }
 

@@ -22,6 +22,7 @@ data RETree = Nd RETree Op RETree | Ex RHSArrExp deriving (Eq,Show)
 data Stmt=
      Where ArrExp String
    | EBlk
+   | NamedLitNum ArrExp String
    | SFn ArrExp String [ArrExp]
    | Cpd ArrExp OptTy (Maybe Char) RETree
    | MacroProto [String] String [String]
@@ -92,6 +93,7 @@ pMacroUse=(pInit MacroUse) `cSL` pLHS <@ pMatchStr "=" `fl` pString `cSL` pStrin
 
 pFCall=pMatchStr "foreign" @> (pInit FCall) `fl` pString `flL` pString
 
+pNamedLitNum = (pInit NamedLitNum) `fl` (pString `raise` (\s->Arr s [] False)) <@ (pChar '=') `fl` pGenNumber
 
 pSFn=pMatchStr "mapFn" @> (pInit SFn) `fl` pLHSIdxExp `fl` pString `flL` pIdxExp
 
@@ -121,7 +123,7 @@ allAccounted p cs=case p cs of
   Nothing->Nothing
   Just(v,r)->if all isSpace r then Just v else Nothing
 
-pLine=pLineParser [pEBlk,pFCall,pWhere,pDefinition,pMacroUse,pStatement]
+pLine=pLineParser [pEBlk,pFCall,pWhere,pDefinition,pNamedLitNum,pMacroUse,pStatement]
 
 pCharStr prd=(pPredChar' prd) `raise` (\x->[x])
 --pWhere::Parser Stmt
@@ -313,10 +315,13 @@ varToC::String->String
 varToC l=l++"AP"
 arrToC (Arr l _ _)=varToC l
 
-stmtAsC (Cpd l ty red expr)="ExpPtr "++(arrToC l)++"(new "++sh red++");"
+wrapCNew v (t,a)="ExpPtr "++v++"(new "++t++"("++a++"));"
+
+stmtAsC (NamedLitNum (Arr n _ _) v)=wrapCNew (varToC n) ("NumLiteral","double("++v++")")
+stmtAsC (Cpd l ty red expr)=wrapCNew (arrToC l) (sh red)
  where
-  sh Nothing=let (o,s)=treeAsArgs expr in "Combiner("++o++","++doubleC++","++s++")"
-  sh (Just c)="Traversal("++"a"++")"
+  sh Nothing=let (o,s)=treeAsArgs expr in ("Combiner",o++","++doubleC++","++s)
+  sh (Just c)=("Traversal","a")
 stmtAsC _ = "Whee"
 
 fromLeft (Left x)=x

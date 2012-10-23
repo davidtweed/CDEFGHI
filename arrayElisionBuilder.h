@@ -96,19 +96,20 @@ class Exp {
 public:
     Exp(EltType stype);
     virtual ~Exp();
-    void wipeLLVM();
     virtual Value* generateSpecific(GState& global) = 0;
     virtual void wipeSpecific() = 0;
     //maybe use in pattern matching simplification later
     virtual Exp* childSatisfies(EPred pred,void* opaque)=0;
-    virtual Value* generateCode(GState& global)=0;
     virtual void display(ostream &s)=0;
+    void wipeLLVM();
+    Value* generateCode(GState& global);
     VarRec *output;
     Value *llvmTemp;
+    Bitmask idxsInKids; //bitmask of indexes used in child nodes
     EltType type; //unless subclass specisfies real in-type == out-type
-    uint32_t idxsInKids; //bitmask of indexes used in child nodes
 };
 class NumLiteral : public Exp {
+public:
     NumLiteral(int64_t v);
     NumLiteral(uint64_t v);
     NumLiteral(double v);
