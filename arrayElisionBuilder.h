@@ -180,41 +180,41 @@ public:
     uint8_t noIdxs;
     uint8_t idxs[3];
 };
-#define OP_DATA XX(0,ABS,1)\
-    XX(1,SQRT,1)\
-    XX(2,EXP,1)\
-    XX(3,LOG,1)\
-    XX(4,FLOOR,1)\
-    XX(5,SIN,1)\
-    XX(6,COS,1)\
-    XX(7,NOT,1)\
-    XX(8,ADD,2)\
-    XX(9,SUBTRACT,2)\
-    XX(10,MULTIPLY,2)                           \
-    XX(11,DIVIDE,2)\
-    XX(12,IPOWER,2)\
-    XX(13,POWER,2)\
-    XX(14,EQ,2)\
-    XX(15,LT,2)\
-    XX(16,GT,2)\
-    XX(17,LE,2)\
-    XX(18,GE,2)\
-    XX(19,AND,2)\
-    XX(20,ANDNOT,2)\
-    XX(21,OR,2)\
-    XX(22,XOR,2)\
-    XX(23,BAND,2)\
-    XX(24,BANDNOT,2)\
-    XX(25,BOR,2)\
-    XX(26,BXOR,2)\
-    XX(27,MAX,2)\
-    XX(28,MIN,2)\
-    XX(29,WHEN,2)\
-    XX(30,SELECT,3)\
-    XX(31,FMA,3)
+#define OP_DATA XX("abs",0,ABS,1)                    \
+    XX("sqrt",1,SQRT,1)\
+    XX("exp",2,EXP,1)\
+    XX("log",3,LOG,1)\
+    XX("floor",4,FLOOR,1)\
+    XX("sin",5,SIN,1)\
+    XX("cos",6,COS,1)\
+    XX("not",7,NOT,1)\
+    XX("+",8,ADD,2)\
+    XX("=",9,SUBTRACT,2)\
+    XX("*",10,MULTIPLY,2)                           \
+    XX("/",11,DIVIDE,2)\
+    XX("^",12,NPOWER,2)\
+    XX("^^",13,POWER,2)\
+    XX("==",14,EQ,2)\
+    XX("<",15,LT,2)\
+    XX(">",16,GT,2)\
+    XX("<=",17,LE,2)\
+    XX(">=",18,GE,2)\
+    XX("&",19,AND,2)\
+    XX("&~",20,ANDNOT,2)\
+    XX("|",21,OR,2)\
+    XX("!$",22,XOR,2)\
+    XX("&&",23,BAND,2)\
+    XX("&&~",24,BANDNOT,2)\
+    XX("||",25,BOR,2)\
+    XX("!$!$",26,BXOR,2)\
+    XX("\\/",27,MAX,2)\
+    XX("/\\",28,MIN,2)\
+    XX("@@",29,WHEN,2)\
+    XX("select",30,SELECT,3)\
+    XX("fma",31,FMA,3)
 
 //declare the opcodes
-#define XX(a,b,c) const Operation b=a;
+#define XX(s,a,b,c) const Operation b=a;
 OP_DATA;
 #undef XX
 

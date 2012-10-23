@@ -103,14 +103,16 @@ tryParserList (p:ps) cs=case p cs of
   Nothing ->tryParserList ps cs
   r@(Just(_,_))->r
 
-pAll :: Parser ()
+pAll,pNull :: Parser ()
 pAll cs=Just((),[])
 pNull cs=Just((),cs)
 
 pLineParser::[Parser a]-> Parser a
-pLineParser ps cs=(tryParserList ps) (dropWS' cs) --((tryParserList ps) `flB` pCommentToEOL) (dropWS' cs)
+pLineParser ps c0=case tryParserList ps c0 of
+  Nothing->Nothing
+  r@(Just(v,c1))->if all(==' ') c1 ||  isJust (pCommentToEOL c1) then Just(v,"") else Nothing
+
 -- a matching "to end-of-line" comment parser just returns the incoming parse-value
-pCommentToEOL :: Parser ()
 pCommentToEOL = (dropWS (pMatchStr "##" <@ pAll))
 
 --to be safe we require everything on the line to have been understood to say that we've parsed the line
@@ -277,27 +279,58 @@ pStatement=(pInit Cpd) `fl` pLHSIdxExp `flM` pTypeAnnote  `fl` pAsgnOp `fl` pCom
    pLTree t c=case pTyBinOp c of
             Nothing->Just(t,c)
             (Just(op,c1))->let (Just(v2,c2))=pRHSArrExp c1 in pLTree (Nd t op (Ex v2)) c2
-
+{-
 toThreeCode::[Stmt]->[Stmt]
 toThreeCode []=[]
 toThreeCode (r@(Cpd a o ro tree):rs)
   |otherwise=linTree tree r (toThreeCode rs)
 toThreeCode (r:rs)=r:toThreeCode rs
 
-linTree (Ex a) r rs=rs
-linTree (Nd a op b) r rs=rs
-
+linTree i (Ex a) r rs=rs
+linTree i (Nd a op b) r rs=rs
+-}
 writeCPP::[Stmt]->[String]
 writeCPP=map show
+
+--return list of arrays seen, and a list of those elements used before definition
+checkUseAfterDef::[String]->[Stmt]->([String],[String])
+checkUseAfterDef inputs ss=foldl f (inputs,[]) ss
+  where f (seen,v) (Cpd (Arr l _ _) _ _ t)=(l:seen,[x | x<-usedIn [] t, x `elem` seen])
+        f r _ = r
+
+--get list of variables used as input to tree
+usedIn acc (Ex (Left (Arr s _ _)))=s:acc
+usedIn acc (Ex _)=acc
+usedIn acc (Nd l _ r)=usedIn (usedIn acc l) r
 
 processStrB::String->String
 processStrB=unlines.map (show.fromJust.(allAccounted pLine)).lines
 
 processStrF::String->String
-processStrF=unlines.map (fmt.fromJust.(allAccounted pLine)).lines
+processStrF=unlines.map (stmtAsC.fromJust.(allAccounted pLine)).lines
+
+varToC::String->String
+varToC l=l++"AP"
+arrToC (Arr l _ _)=varToC l
+
+stmtAsC (Cpd l ty red expr)="Exp* "++(arrToC l)++"=new "++sh red++";"
+ where
+  sh Nothing=let (o,s)=treeAsArgs expr in "Combiner("++o++","++doubleC++","++s++")"
+  sh (Just c)="Traversal("++"a"++")"
+stmtAsC _ = "Whee"
+
+fromLeft (Left x)=x
+fromLeft v = error ("not a Left:"++show v)
+
+treeAsArgs (Nd (Ex l) (Op o ty) (Ex r))=((fromJust.(`lookup` opTbl)) o,(arrToC(fromLeft l))++","++(arrToC(fromLeft r)))
+
+doubleC="FLOAT|W64"
+
+opTbl=[("+","ADD"),("-","SUBTRACT"),("*","MULTIPLY"),("^","NPOWER"),("<=","LE")]
 
 pFile s=do j<-readFile s
            (putStr.processStrF) j
+pF n=pFile ("TESTS/parseT"++show n++".txt")
 
 processStrE::String->String
 processStrE=unlines.map (show.pLine).(filter (not.all isSpace) .lines)

@@ -47,11 +47,11 @@ Value* mkConst(EltType type,int64_t n)
     }
 }
 
-#define XX(a,b,c) c,
+#define XX(s,a,b,c) c,
 const int opArity[]={OP_DATA 0};
 #undef XX
 
-#define XX(a,b,c) #b,
+#define XX(s,a,b,c) #b,
 const char* const opNames[]={OP_DATA ""};
 #undef XX
 
