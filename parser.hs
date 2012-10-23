@@ -326,7 +326,7 @@ treeAsArgs (Nd (Ex l) (Op o ty) (Ex r))=((fromJust.(`lookup` opTbl)) o,(arrToC(f
 
 doubleC="FLOAT|W64"
 
-opTbl=[("+","ADD"),("-","SUBTRACT"),("*","MULTIPLY"),("^","NPOWER"),("<=","LE")]
+opTbl=[("+","ADD"),("-","SUBTRACT"),("*","MULTIPLY"),("/","DIVIDE"),("^","NPOWER"),("<=","LE")]
 
 pFile s=do j<-readFile s
            (putStr.processStrF) j

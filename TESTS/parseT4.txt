@@ -1,0 +1,4 @@
+W.i = A.i + B.i ## probably simplest program exercising the compiler
+X.i = B.i * C.i
+Y.i = A.i - X.i
+Z.i = X.i / Y.i
