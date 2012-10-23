@@ -313,7 +313,7 @@ varToC::String->String
 varToC l=l++"AP"
 arrToC (Arr l _ _)=varToC l
 
-stmtAsC (Cpd l ty red expr)="Exp* "++(arrToC l)++"=new "++sh red++";"
+stmtAsC (Cpd l ty red expr)="ExpPtr "++(arrToC l)++"(new "++sh red++");"
  where
   sh Nothing=let (o,s)=treeAsArgs expr in "Combiner("++o++","++doubleC++","++s++")"
   sh (Just c)="Traversal("++"a"++")"
