@@ -20,7 +20,7 @@ type RHSArrExp=Either ArrExp String -- Right number
 type OptTy=Maybe Type -- optional type annoation
 data RETree = Nd RETree Op RETree | Ex RHSArrExp deriving (Eq,Show)
 data Stmt=
-     Where ArrExp String
+     Where String RETree
    | EBlk
    | NamedLitNum ArrExp String
    | SFn ArrExp String [ArrExp]
@@ -127,7 +127,7 @@ pLine=pLineParser [pEBlk,pFCall,pWhere,pDefinition,pNamedLitNum,pMacroUse,pState
 
 pCharStr prd=(pPredChar' prd) `raise` (\x->[x])
 --pWhere::Parser Stmt
-pWhere=(pMatchStr "where") @> (pInit Where) `fl` pIdxExp <@ (pMatchStr "=>") `fl` (pCharStr isGenAlpha) <@ (pMatchStr "{")
+pWhere=(pMatchStr "where") @> (pInit Where) `fl` (pCharStr isGenAlpha) <@ (pMatchStr "=>") `fl` pRETree  <@ (pMatchStr "{")
 
 pEBlk = (pInit EBlk) <@ (pChar '}')
 
@@ -270,17 +270,19 @@ pEAlt a b c=case a c of
 
 pRHSArrExp = pEAlt pIdxExp pGenNumber
 
---one odd syntax <-> AST mismatch: write LHS types on LHS identifier but store on the assignment operator
---also need to stick a dummy operator on front of list
-pStatement::Parser Stmt
-pStatement=(pInit Cpd) `fl` pLHSIdxExp `flM` pTypeAnnote  `fl` pAsgnOp `fl` pCombOps
-  where
-   pCombOps::Parser RETree
-   pCombOps c=let r@(Just(v1,c0))=(((pInit Ex) `fl` pRHSArrExp) c) in pLTree v1 c0
+pRETree::Parser RETree
+pRETree c=let r@(Just(v1,c0))=(((pInit Ex) `fl` pRHSArrExp) c) in pLTree v1 c0
+ where
    pLTree::RETree->Parser RETree
    pLTree t c=case pTyBinOp c of
             Nothing->Just(t,c)
             (Just(op,c1))->let (Just(v2,c2))=pRHSArrExp c1 in pLTree (Nd t op (Ex v2)) c2
+
+--one odd syntax <-> AST mismatch: write LHS types on LHS identifier but store on the assignment operator
+--also need to stick a dummy operator on front of list
+pStatement::Parser Stmt
+pStatement=(pInit Cpd) `fl` pLHSIdxExp `flM` pTypeAnnote  `fl` pAsgnOp `fl` pRETree
+
 {-
 toThreeCode::[Stmt]->[Stmt]
 toThreeCode []=[]

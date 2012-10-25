@@ -2,10 +2,9 @@ dC.ij! = d.ij - m.j                      ## move to mean 0 representation
 pVec.ik! =+ dC.i% * v.k%                 ## project onto current "ignore" vectors
 predVec.ij! =+ pVec.i% * v.j%            ## use weights to form a "prediction"
 residDist.i! =+ dC.i% - predVec.i%^2     ## what's the error wrt the prediction
-within.i! = residDist.i <= lSq           ## figure out the points whose error is "small"
-where within.i=>I{                       ## compute sufficient statistics for that set
-  sum.j! =+ dC.Ij
-  sumSq.jk! =+ dC.Ij * dC.Ik
+where I => residDist.i <= lSq {           ## compute sufficient statistics for points whose error is "small"
+  sum.j! =+ dC.ij
+  sumSq.jk! =+ dC.ij * dC.ik
   count =+ 1
 }
 newMean.i = sum.i / count                ## ideally these would be protected against count==0

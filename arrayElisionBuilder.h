@@ -82,6 +82,8 @@ struct ArrRec {
 struct ProblemState {
     Index extents[MAX_TOT_DIMS];
     int fstUnusedExtent;
+    ArrRec* arrays;
+    int noArrays;
 };
 //loops are actually bivalued, with input:output indices
 //the
