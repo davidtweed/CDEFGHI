@@ -26,8 +26,7 @@ BLK(SCALAR1,0);BLK(VECTOR2,1);BLK(VECTOR4,2);BLK(VECTOR8,3);BLK(VECTOR16,4);BLK(
 #define SOD3(x,f1,f2,f3) SO3(x,UINT,f1,SINT,f2,FLOAT,f3)
 
 bool
-newValueInIdxSet(Bitmask oldValue,Bitmask newValue)
-{
+newValueInIdxSet(Bitmask oldValue,Bitmask newValue) {
     return (newValue & (~oldValue))!=0;
 }
 
@@ -36,8 +35,7 @@ Value* CST(int n) { return ConstantInt::get(getGlobalContext(),APInt(32,n)); }
 inline bool isFloating(EltType type) { return FLOAT & type; }
 
 //TODO: fix corner cases like min/max limits
-Value* mkConst(EltType type,int64_t n)
-{
+Value* mkConst(EltType type,int64_t n) {
     if(isFloating(type)){ //floating point
         return ConstantInt::get(getGlobalContext(),APInt(8*(type&7),n));
     }else{ //discrete variable
@@ -61,8 +59,8 @@ constexpr int fundamentalTypeCode(int x) { return (x>>6)&3; }
 
 #define BP(x,a,b) XX(x,a,b)
 
-void initialSetup()
-{/*
+void initialSetup() {
+/*
    #define SS(t,s,l) typeDB[fundamentalTypeCode(t)][s]=Type::l(getGlobalContext());
    BP(UINT,W8,getInt8Ty,W16,getInt16Ty,W32,getInt32Ty,W64,getInt64Ty);
    BP(SINT,W8,getInt8Ty,W16,getInt16Ty,W32,getInt32Ty,W64,getInt64Ty);
@@ -79,13 +77,11 @@ void initialSetup()
     typeDB[fundamentalTypeCode(FLOAT)][W64]=Type::getDoubleTy(getGlobalContext());
 }
 
-Type* llvmType(EltType e)
-{
+Type* llvmType(EltType e) {
     return typeDB[fundamentalTypeCode(e)][e&7];
 }
 
-Value* getAccumInitialiser(Operation op,EltType type)
-{
+Value* getAccumInitialiser(Operation op,EltType type) {
     switch(op){
         /*OP(ADD,0.0f,0LL);
           OP(MULTIPLY,1.0f,1LL);*/
@@ -110,8 +106,7 @@ constexpr int CC(int o,int t) { return (o|t); }
  *lots of different default arguments. So using pointers to member functions
  *just gets nasty, tedious and much more work.
  */
-Value* makeLLVMBinOp(GState &gs,Operation op,EltType type,Value **args)
-{
+Value* makeLLVMBinOp(LLCompilerState &gs,Operation op,EltType type,Value **args) {
     Value *a0=args[0];
     //unary operations --------------------------------------------------
     if(opArity[op]==1){
@@ -180,95 +175,85 @@ Value* makeLLVMBinOp(GState &gs,Operation op,EltType type,Value **args)
     panic_if(1,"unhandled operator");
 }
 
-Exp::Exp(EltType stype)
-{
+Exp::Exp(EltType stype) {
     output=0;
     llvmTemp=0;
     type=stype;
 }
 
-Exp::~Exp()
-{
+Exp::~Exp() {
     //nothing
 }
 
 void
-Exp::wipeLLVM()
-{
+Exp::wipeLLVM() {
     llvmTemp=0;
     wipeSpecific();
 }
 
-VarRec::VarRec(Value* sllvmTemp,EltType stype) : Exp(stype)
-{
+VarRec::VarRec(Value* sllvmTemp,EltType stype) : Exp(stype) {
     llvmTemp=sllvmTemp;
 }
 
-VarRec::VarRec(ArrRec *a,EltType stype) : Exp(stype)
-{
+VarRec::VarRec(ArrRec *a,EltType stype) : Exp(stype) {
 
 }
 
-VarRec::~VarRec()
-{
+VarRec::~VarRec() {
 
 }
 
 Exp*
-VarRec::childSatisfies(EPred pred,void* opaque)
-{
+VarRec::childSatisfies(EPred pred,void* opaque) {
     return 0;
 }
 
-NumLiteral::NumLiteral(int64_t v) : Exp(SINT | W64)
-{
+NumLiteral::NumLiteral(int64_t v) : Exp(SINT | W64) {
     sMem=v;
     type=SINT | W64;
 }
 
-NumLiteral::NumLiteral(uint64_t v) : Exp(UINT | W64)
-{
+NumLiteral::NumLiteral(uint64_t v) : Exp(UINT | W64) {
     uMem=v;
     type=UINT | W64;
 }
 
-NumLiteral::NumLiteral(double v) : Exp(FLOAT | W64)
-{
+NumLiteral::NumLiteral(double v) : Exp(FLOAT | W64) {
     fMem=v;
     type=FLOAT | W64;
 }
 
-NumLiteral::~NumLiteral()
-{
+NumLiteral::~NumLiteral() {
 
 }
 
-Exp*
-NumLiteral::childSatisfies(EPred pred,void* opaque)
-{
+Exp* NumLiteral::childSatisfies(EPred pred,void* opaque) {
     return 0;
 }
 
 Value*
-NumLiteral::generateSpecific(GState& global)
-{
+NumLiteral::generateSpecific(LLCompilerState& global) {
 
 }
 
 void
-NumLiteral::wipeSpecific()
-{
+NumLiteral::wipeSpecific() {
 
 }
 
-void
-NumLiteral::display(ostream &s)
-{
-
+void NumLiteral::display(ProblemState *ps,ostream &s) {
+    if(type==FLOAT){
+        s<<"LitDouble "<<fMem;
+    }else if(type==UINT){
+        s<<"LitUInt "<<uMem;
+    }else if(type==SINT){
+        s<<"LitUInt "<<sMem;
+    }else{
+        s<<"Lit malformed";
+    }
 }
 
-UFnApp::UFnApp(ExpPtr sinput,void *sfnPtr,EltType stype) : Exp(stype)
-{
+UFnApp::UFnApp(ExpPtr sinput,void *sfnPtr,EltType stype) : Exp(stype) {
     input=sinput;
     fnPtr=sfnPtr;
     inT=0;
@@ -279,14 +264,11 @@ UFnApp::~UFnApp() {
 
 }
 
-Exp*
-UFnApp::childSatisfies(EPred pred,void* opaque)
-{
+Exp* UFnApp::childSatisfies(EPred pred,void* opaque) {
     return 0;
 }
 
-Combiner::Combiner(Operation soperation,EltType stype,ExpPtr i0,ExpPtr i1,ExpPtr i2) : Exp(stype)
-{
+Combiner::Combiner(Operation soperation,EltType stype,ExpPtr i0,ExpPtr i1,ExpPtr i2) : Exp(stype) {
     inputs[0]=i0;
     inputs[1]=i1;
     inputs[2]=i2;
@@ -297,35 +279,27 @@ Combiner::~Combiner() {
 
 }
 
-Exp*
-Combiner::childSatisfies(EPred pred,void* opaque)
-{
+Exp* Combiner::childSatisfies(EPred pred,void* opaque) {
     return 0;
 }
 
-Traversal::Traversal(int a,EltType stype) : Exp(stype)
-{
+Traversal::Traversal(int a,EltType stype) : Exp(stype) {
 
 }
 
-Traversal::~Traversal()
-{
+Traversal::~Traversal() {
 
 }
 
-Exp*
-Traversal::childSatisfies(EPred pred,void* opaque)
-{
+Exp* Traversal::childSatisfies(EPred pred,void* opaque) {
     return 0;
 }
 
-Value* writeInitOfType()
-{
+Value* writeInitOfType() {
     return 0;
 }
 
-Value* typeConvert(GState &gs,EltType outT,Value *v,EltType inT)
-{
+Value* typeConvert(LLCompilerState &gs,EltType outT,Value *v,EltType inT) {
     const int SAME=0;
     const int SMALLER=1;
     const int LARGER=2;
@@ -364,8 +338,7 @@ Value* typeConvert(GState &gs,EltType outT,Value *v,EltType inT)
 }
 
 //matches formulae used in ref() in array.jl
-int idxsToLinear(GState& gs,ArrRec *arrRec,int *idxs)
-{
+int idxsToLinear(LLCompilerState& gs,ArrRec *arrRec,int *idxs) {
     int v=idxs[arrRec->noDims-1];
     int i;
     for(i=arrRec->noDims-2;i>=0;--i){
@@ -376,8 +349,7 @@ int idxsToLinear(GState& gs,ArrRec *arrRec,int *idxs)
 }
 
 //produce integer indexing into an array with constant dimension but Value* indices
-Value* idxsToLinearSymbolic(GState& gs,ArrRec *arrRec,Value **idxs)
-{
+Value* idxsToLinearSymbolic(LLCompilerState& gs,ArrRec *arrRec,Value **idxs) {
     Value* v=idxs[arrRec->noDims-1];
     int i;
     for(i=arrRec->noDims-2;i>=0;--i){/*
@@ -387,16 +359,14 @@ Value* idxsToLinearSymbolic(GState& gs,ArrRec *arrRec,Value **idxs)
     return v;
 }
 
-Value* loadValueFromArraySlot(GState& gs,EltType t,ArrRec *arrRec,Value **idxs)
-{
+Value* loadValueFromArraySlot(LLCompilerState& gs,EltType t,ArrRec *arrRec,Value **idxs) {
     Value* idxVar=idxsToLinearSymbolic(gs,arrRec,idxs);
     Value* indexes[2]={CST(0),idxVar};
     Value *ptr=gs.builder->CreateGEP(arrRec->basePtr,ArrayRef<Value*>(indexes));
     return gs.builder->CreateLoad(ptr);
 }
 
-Value* storeValueToArraySlot(GState& gs,EltType t,ArrRec *arrRec,Value **idxs,Value *value)
-{
+Value* storeValueToArraySlot(LLCompilerState& gs,EltType t,ArrRec *arrRec,Value **idxs,Value *value) {
     Value* idxVar=idxsToLinearSymbolic(gs,arrRec,idxs);
     Value* indexes[3]={CST(0),idxVar};
     Value *ptr=gs.builder->CreateGEP(arrRec->basePtr,ArrayRef<Value*>(indexes));
@@ -407,8 +377,7 @@ Value* storeValueToArraySlot(GState& gs,EltType t,ArrRec *arrRec,Value **idxs,Va
  *of literal deltas and convert into a group of LLVM Value* of current variables to
  *index into the array
  */
-void getActualIdxs(Value **output,GState& gs,ArrRec *r,uint8_t *masterIdxs,int8_t *deltas)
-{
+void getActualIdxs(Value **output,LLCompilerState& gs,ArrRec *r,uint8_t *masterIdxs,int8_t *deltas) {
     int i;
     for(i=0;i<r->noDims;++r){
         output[i]=gs.curIdxVars[masterIdxs[i]];
@@ -418,22 +387,20 @@ void getActualIdxs(Value **output,GState& gs,ArrRec *r,uint8_t *masterIdxs,int8_
     }
 }
 
-Value* Exp::generateCode(GState& gs)
-{
+Value* Exp::generateCode(LLCompilerState& gs) {
     if(llvmTemp!=0){
         return llvmTemp;
     }
     Value *rv=generateSpecific(gs);
     if(output!=0){
-        Value* actualIdxs[GState::MAX_RANGES];
+        Value* actualIdxs[LLCompilerState::MAX_RANGES];
         getActualIdxs(actualIdxs,gs,output->r,output->idxs,output->deltas);
         storeValueToArraySlot(gs,type,output->r,actualIdxs,rv);
     }
     return rv;
 }
 
-Value* VarRec::generateSpecific(GState& gs)
-{
+Value* VarRec::generateSpecific(LLCompilerState& gs) {
     int type;
     return loadValueFromArraySlot(gs,type,0,0);
 }
@@ -442,26 +409,46 @@ void VarRec::wipeSpecific() {
     //nothing
 }
 
-void VarRec::display(ostream &s) {
-
+void VarRec::display(ProblemState *ps,ostream &s) {
+    s<<"VarRec "<<r->name;
+    if(noIdxs>0){
+        s<<".";
+        int i;
+        for(i=0;i<noIdxs;++i){
+            int idx=idxs[i],delta=deltas[i];
+            bool brackets=(idx==0 || delta!=0);
+            if(brackets){
+                s<<"(";
+            }
+            if(idx!=0){
+                s<<"V"<<ps->extents[idx];
+            }
+            if(idx==0||delta!=0){
+                if(delta>=0){
+                    s<<"+";
+                }
+                s<<static_cast<int>(delta);
+            }
+            if(brackets){
+                s<<")";
+            }
+        }
+    }
 }
 
-Value* UFnApp::generateSpecific(GState& gs)
-{
+Value* UFnApp::generateSpecific(LLCompilerState& gs) {
     return 0;
 }
 
-void UFnApp::wipeSpecific()
-{
+void UFnApp::wipeSpecific() {
     input->wipeLLVM();
 }
 
-void UFnApp::display(ostream &s) {
+void UFnApp::display(ProblemState *ps,ostream &s) {
 
 }
 
-Value* Combiner::generateSpecific(GState& gs)
-{
+Value* Combiner::generateSpecific(LLCompilerState& gs) {
     Value *as[3];
     for(int i=0;i<3;++i){
         //UGH: first argument of select is special case
@@ -473,8 +460,7 @@ Value* Combiner::generateSpecific(GState& gs)
 
 }
 
-void Combiner::wipeSpecific()
-{
+void Combiner::wipeSpecific() {
 #if 0
     int i;
     for(i=0;i<2;++i){
@@ -490,7 +476,7 @@ void Combiner::wipeSpecific()
     }
 }
 
-void Combiner::display(ostream &s) {
+void Combiner::display(ProblemState *ps,ostream &s) {
 
 }
 
@@ -502,8 +488,7 @@ struct TravDB {
     std::vector<Value*> accumVarsOut;
 };
 
-Value* Traversal::generateInnermost(GState& gs,int idx,TravDB &db)
-{
+Value* Traversal::generateInnermost(LLCompilerState& gs,int idx,TravDB &db) {
     const int gsIdx=idxs[idx];
     const int loopStart=gs.traversalRanges[gsIdx][0];
     const int loopLimit=gs.traversalRanges[gsIdx][1];
@@ -551,8 +536,7 @@ Value* Traversal::generateInnermost(GState& gs,int idx,TravDB &db)
     gs.builder->SetInsertPoint(AfterBB);
 }
 #endif
-Value* Traversal::generateSpecific(GState& gs)
-{
+Value* Traversal::generateSpecific(LLCompilerState& gs) {
 #if 0
     assert(noIdxs==1); //temporary
     int idx;
@@ -615,8 +599,7 @@ Value* Traversal::generateSpecific(GState& gs)
 #endif
 }
 
-void Traversal::wipeSpecific()
-{
+void Traversal::wipeSpecific() {
     int i;
     for(auto it : body){
         it->wipeLLVM();
@@ -626,12 +609,11 @@ void Traversal::wipeSpecific()
     }
 }
 
-void Traversal::display(ostream &s) {
+void Traversal::display(ProblemState *ps,ostream &s) {
 
 }
 
-Function* createFunctionFromDAG(GState &gs,ExpPtr e,const char* const fnName)
-{
+Function* createFunctionFromDAG(LLCompilerState &gs,ExpPtr e,const char* const fnName) {
     //generate function prologue ---------------------------------------------------
     // Make the function type:  double(double,double) etc.
     Function *TheFunction;
@@ -699,20 +681,19 @@ Function* createFunctionFromDAG(GState &gs,ExpPtr e,const char* const fnName)
 /*Exp* is a DAG, so need to assign llvmTemp in process.
  *Also MUST return if llvmTemp set since other node content may not be valid.
  */
-void test()
-{
+void test() {
 
 }
 #define S(X) printf("Sizeof %s=%d\n",#X,sizeof(X));
-int main(int argc,char* argv[])
-{
+int main(int argc,char* argv[]) {
     S(Exp);
     S(ExpPtr);
     S(Exp*);
     S(VarRec);
     S(UFnApp);
     S(Combiner);
-#if 1
+    S(Traversal);
+#if 0
 //very simple test code
     ExpPtr AAP(0),BAP(0),CAP(0);
     ExpPtr UAP(new NumLiteral(double(2)));

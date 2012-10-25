@@ -25,13 +25,17 @@ using namespace std;
 using namespace llvm;
 
 typedef uint32_t Bitmask;
-
+#ifdef SYS_64BIT
+typedef int64_t Index;
+#else
+typedef int32_t Index;
+#endif
 struct TraversalRange;
 
 /*SUBTLE: we're dealing with a DAG, so recursive algorithms need to check
  *if already visited a node. In Exp done by having llvmTemp set non-zero
  */
-class GState {
+class LLCompilerState {
 public:
     LLVMContext *TheLLVMContext;// = getGlobalContext();
     IRBuilder<> *builder;//(getGlobalContext());
@@ -59,17 +63,25 @@ public:
     Value *neutral;
 };
 #endif
+const int MAX_TOT_DIMS=256;
 const int MAX_ARR_DIMS=3;
-//difference between sizes and allocd can arise from "when" clauses
+
+//difference between sizes and allocd can arise from "where" clauses
+//probably difficult to alloc more than 2^32 floats on desktop machine, but maybe with mmap on an SSD...
 struct ArrRec {
     Value *basePtr;
     char *name;
-    int origSzIdxs[MAX_ARR_DIMS];
-    uint16_t sizes[MAX_ARR_DIMS];
-    uint16_t allocd[MAX_ARR_DIMS];
+    uint8_t origSzIdxs[MAX_ARR_DIMS];
+    uint8_t sizes[MAX_ARR_DIMS];
+    uint8_t allocd[MAX_ARR_DIMS];
     EltType type;
     uint8_t noDims;
     uint8_t needsMaterialisation;
+};
+//extent[0] is always a special zero value
+struct ProblemState {
+    Index extents[MAX_TOT_DIMS];
+    int fstUnusedExtent;
 };
 //loops are actually bivalued, with input:output indices
 //the
@@ -85,8 +97,8 @@ public:
     };*/
 struct TraversalRange {
     //ranges are {iterStart,iterStop,dimensionMax}
-    int bnds[3];
-    ExpPtr *when; //actual expression used in when clause
+    Index bnds[3];
+    ExpPtr *where; //actual expression used in where clause
     Value *llvmValues[2]; //scalar index that holds value containing idx
     //0-OUT, 1-IN
 };
@@ -96,13 +108,13 @@ class Exp {
 public:
     Exp(EltType stype);
     virtual ~Exp();
-    virtual Value* generateSpecific(GState& global) = 0;
+    virtual Value* generateSpecific(LLCompilerState& global) = 0;
     virtual void wipeSpecific() = 0;
     //maybe use in pattern matching simplification later
     virtual Exp* childSatisfies(EPred pred,void* opaque)=0;
-    virtual void display(ostream &s)=0;
+    virtual void display(ProblemState *ps,ostream &s)=0;
     void wipeLLVM();
-    Value* generateCode(GState& global);
+    Value* generateCode(LLCompilerState& global);
     VarRec *output;
     Value *llvmTemp;
     Bitmask idxsInKids; //bitmask of indexes used in child nodes
@@ -115,9 +127,9 @@ public:
     NumLiteral(double v);
     ~NumLiteral();
     Exp* childSatisfies(EPred pred,void* opaque);
-    Value* generateSpecific(GState& global);
+    Value* generateSpecific(LLCompilerState& global);
     void wipeSpecific();
-    void display(ostream &s);
+    void display(ProblemState *ps,ostream &s);
     union {
         double fMem;
         int64_t sMem;
@@ -131,21 +143,22 @@ public:
     VarRec(ArrRec *a,EltType stype);
     ~VarRec();
     Exp* childSatisfies(EPred pred,void* opaque);
-    Value* generateSpecific(GState& global);
+    Value* generateSpecific(LLCompilerState& global);
     void wipeSpecific();
-    void display(ostream &s);
+    void display(ProblemState *ps,ostream &s);
     ArrRec *r;
     uint8_t idxs[MAX_ARR_DIMS];
     int8_t deltas[MAX_ARR_DIMS];
+    int8_t noIdxs;
 };
 //for future use where a julia/C call-back function is used
 class UFnApp : public Exp {
 public:
     UFnApp(ExpPtr sinput,void *sfnPtr,EltType stype);
     ~UFnApp();
-    Value* generateSpecific(GState& global);
+    Value* generateSpecific(LLCompilerState& global);
     void wipeSpecific();
-    void display(ostream &s);
+    void display(ProblemState *ps,ostream &s);
     Exp* childSatisfies(EPred pred,void* opaque);
     ExpPtr input;
     void *fnPtr;
@@ -154,9 +167,9 @@ public:
 struct Combiner : public Exp {
     Combiner(Operation soperation,EltType stype,ExpPtr i0,ExpPtr i1=0,ExpPtr i2=0);
     ~Combiner();
-    Value* generateSpecific(GState& global);
+    Value* generateSpecific(LLCompilerState& global);
     void wipeSpecific();
-    void display(ostream &s);
+    void display(ProblemState *ps,ostream &s);
     Exp* childSatisfies(EPred pred,void* opaque);
     ExpPtr inputs[3];
     Operation operation;
@@ -172,9 +185,9 @@ class Traversal : public  Exp {
 public:
     Traversal(int a,EltType stype);
     ~Traversal();
-    Value* generateSpecific(GState& global);
+    Value* generateSpecific(LLCompilerState& global);
     void wipeSpecific();
-    void display(ostream &s);
+    void display(ProblemState *ps,ostream &s);
     Exp* childSatisfies(EPred pred,void* opaque);
     std::vector<ExpPtr> body;
     std::vector<Combiner*> accumulations;
@@ -210,7 +223,7 @@ public:
     XX("!$!$",26,BXOR,2)\
     XX("\\/",27,MAX,2)\
     XX("/\\",28,MIN,2)\
-    XX("@@",29,WHEN,2)\
+    XX("@@",29,WHERE,2)\
     XX("select",30,SELECT,3)\
     XX("fma",31,FMA,3)
 
