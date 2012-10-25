@@ -108,7 +108,7 @@ struct TraversalRange {
 typedef Exp* (*EPred)(Exp* e,void* opaque);
 class Exp {
 public:
-    Exp(EltType stype);
+    Exp(uint8_t snodeType,EltType stype);
     virtual ~Exp();
     virtual Value* generateSpecific(LLCompilerState& global) = 0;
     virtual void wipeSpecific() = 0;
@@ -121,6 +121,19 @@ public:
     Value *llvmTemp;
     Bitmask idxsInKids; //bitmask of indexes used in child nodes
     EltType type; //unless subclass specisfies real in-type == out-type
+    uint8_t loopBodyIdx;
+    uint8_t nodeType;
+};
+class Collection : public Exp {
+public:
+    Collection(vector<ExpPtr> &selts);
+    ~Collection();
+    Exp* childSatisfies(EPred pred,void* opaque);
+    Value* generateSpecific(LLCompilerState& global);
+    void wipeSpecific();
+    void display(ProblemState *ps,ostream &s);
+    std::vector<ExpPtr> elts;
+    static const int TYPECODE=0;
 };
 class NumLiteral : public Exp {
 public:
@@ -137,7 +150,7 @@ public:
         int64_t sMem;
         uint64_t uMem;
     };
-    int type;
+    static const int TYPECODE=1;
 };
 class VarRec : public Exp {
 public:
@@ -152,6 +165,20 @@ public:
     uint8_t idxs[MAX_ARR_DIMS];
     int8_t deltas[MAX_ARR_DIMS];
     int8_t noIdxs;
+    static const int TYPECODE=2;
+};
+const int MAX_GEN_STATS=4;
+class RandArr : public Exp {
+public:
+    RandArr(EltType stype,uint8_t srandType);
+    ~RandArr();
+    Exp* childSatisfies(EPred pred,void* opaque);
+    Value* generateSpecific(LLCompilerState& global);
+    void wipeSpecific();
+    void display(ProblemState *ps,ostream &s);
+    Value *suffStatsD[MAX_GEN_STATS];
+    uint8_t randType;
+    static const int TYPECODE=3;
 };
 //for future use where a julia/C call-back function is used
 class UFnApp : public Exp {
@@ -165,6 +192,7 @@ public:
     ExpPtr input;
     void *fnPtr;
     EltType inT,outT;
+    static const int TYPECODE=4;
 };
 struct Combiner : public Exp {
     Combiner(Operation soperation,EltType stype,ExpPtr i0,ExpPtr i1=0,ExpPtr i2=0);
@@ -177,6 +205,7 @@ struct Combiner : public Exp {
     Operation operation;
     EltType evalType;
     bool reorderable;
+    static const int TYPECODE=5;
 };
 /*
  *It's VITAL that the variable inputs to an accumulation have been evaluated in
@@ -185,16 +214,17 @@ struct Combiner : public Exp {
  */
 class Traversal : public  Exp {
 public:
-    Traversal(int a,EltType stype);
+    Traversal(Collection &sbody,Collection &saccumulations,EltType stype);
     ~Traversal();
     Value* generateSpecific(LLCompilerState& global);
     void wipeSpecific();
     void display(ProblemState *ps,ostream &s);
     Exp* childSatisfies(EPred pred,void* opaque);
-    std::vector<ExpPtr> body;
-    std::vector<Combiner*> accumulations;
+    Collection body;
+    Collection accumulations;
     uint8_t noIdxs;
     uint8_t idxs[3];
+    static const int TYPECODE=6;
 };
 #define OP_DATA XX("abs",0,ABS,1)                    \
     XX("sqrt",1,SQRT,1)\

@@ -175,10 +175,12 @@ Value* makeLLVMBinOp(LLCompilerState &gs,Operation op,EltType type,Value **args)
     panic_if(1,"unhandled operator");
 }
 
-Exp::Exp(EltType stype) {
+Exp::Exp(uint8_t snodeType,EltType stype) {
     output=0;
     llvmTemp=0;
     type=stype;
+    loopBodyIdx=0;
+    nodeType=snodeType;
 }
 
 Exp::~Exp() {
@@ -191,11 +193,35 @@ Exp::wipeLLVM() {
     wipeSpecific();
 }
 
-VarRec::VarRec(Value* sllvmTemp,EltType stype) : Exp(stype) {
+Collection::Collection(vector<ExpPtr> &selts) : Exp(Collection::TYPECODE,0), elts(selts) {
+
+}
+
+Collection::~Collection() {
+
+}
+
+Exp* Collection::childSatisfies(EPred pred,void* opaque) {
+
+}
+
+Value* Collection::generateSpecific(LLCompilerState& global) {
+
+}
+
+void Collection::wipeSpecific() {
+
+}
+
+void Collection::display(ProblemState *ps,ostream &s) {
+
+}
+
+VarRec::VarRec(Value* sllvmTemp,EltType stype) : Exp(VarRec::TYPECODE,stype) {
     llvmTemp=sllvmTemp;
 }
 
-VarRec::VarRec(ArrRec *a,EltType stype) : Exp(stype) {
+VarRec::VarRec(ArrRec *a,EltType stype) : Exp(VarRec::TYPECODE,stype) {
 
 }
 
@@ -203,22 +229,21 @@ VarRec::~VarRec() {
 
 }
 
-Exp*
-VarRec::childSatisfies(EPred pred,void* opaque) {
+Exp* VarRec::childSatisfies(EPred pred,void* opaque) {
     return 0;
 }
 
-NumLiteral::NumLiteral(int64_t v) : Exp(SINT | W64) {
+NumLiteral::NumLiteral(int64_t v) : Exp(NumLiteral::TYPECODE,SINT | W64) {
     sMem=v;
     type=SINT | W64;
 }
 
-NumLiteral::NumLiteral(uint64_t v) : Exp(UINT | W64) {
+NumLiteral::NumLiteral(uint64_t v) : Exp(NumLiteral::TYPECODE,UINT | W64) {
     uMem=v;
     type=UINT | W64;
 }
 
-NumLiteral::NumLiteral(double v) : Exp(FLOAT | W64) {
+NumLiteral::NumLiteral(double v) : Exp(NumLiteral::TYPECODE,FLOAT | W64) {
     fMem=v;
     type=FLOAT | W64;
 }
@@ -253,7 +278,33 @@ void NumLiteral::display(ProblemState *ps,ostream &s) {
     }
 }
 
-UFnApp::UFnApp(ExpPtr sinput,void *sfnPtr,EltType stype) : Exp(stype) {
+RandArr::RandArr(EltType stype,uint8_t srandType) : Exp(RandArr::TYPECODE,stype) {
+    type=stype;
+    randType=srandType;
+}
+
+RandArr::~RandArr() {
+
+}
+
+Exp* RandArr::childSatisfies(EPred pred,void* opaque) {
+    return 0;
+}
+
+Value* RandArr::generateSpecific(LLCompilerState& global) {
+
+}
+
+void RandArr::wipeSpecific() {
+
+}
+
+void RandArr::display(ProblemState *ps,ostream &s) {
+
+}
+
+
+UFnApp::UFnApp(ExpPtr sinput,void *sfnPtr,EltType stype) : Exp(RandArr::TYPECODE,stype) {
     input=sinput;
     fnPtr=sfnPtr;
     inT=0;
@@ -268,7 +319,7 @@ Exp* UFnApp::childSatisfies(EPred pred,void* opaque) {
     return 0;
 }
 
-Combiner::Combiner(Operation soperation,EltType stype,ExpPtr i0,ExpPtr i1,ExpPtr i2) : Exp(stype) {
+Combiner::Combiner(Operation soperation,EltType stype,ExpPtr i0,ExpPtr i1,ExpPtr i2) : Exp(RandArr::TYPECODE,stype) {
     inputs[0]=i0;
     inputs[1]=i1;
     inputs[2]=i2;
@@ -283,7 +334,8 @@ Exp* Combiner::childSatisfies(EPred pred,void* opaque) {
     return 0;
 }
 
-Traversal::Traversal(int a,EltType stype) : Exp(stype) {
+Traversal::Traversal(Collection &sbody,Collection &saccumulations,EltType stype)
+ : Exp(RandArr::TYPECODE,stype),body(sbody), accumulations(saccumulations){
 
 }
 
@@ -601,17 +653,24 @@ Value* Traversal::generateSpecific(LLCompilerState& gs) {
 
 void Traversal::wipeSpecific() {
     int i;
-    for(auto it : body){
+    for(auto it : body.elts){
         it->wipeLLVM();
     }
-    for(auto it2 : accumulations){
-
+    for(auto it2 : accumulations.elts){
+        it2->wipeLLVM();
     }
 }
 
 void Traversal::display(ProblemState *ps,ostream &s) {
 
 }
+
+//since this is a DAG, providing we always instantiate the children before the parents the dependencies are ok
+void generateLoopBody(LLCompilerState &gs,ProblemState &ps,ExpPtr e,uint8_t loopBodyIdx) {
+
+
+    }
+
 
 Function* createFunctionFromDAG(LLCompilerState &gs,ExpPtr e,const char* const fnName) {
     //generate function prologue ---------------------------------------------------
