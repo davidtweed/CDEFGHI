@@ -1,4 +1,5 @@
 #include "arrayElisionBuilder.h"
+#include <iostream>
 
 #define STRINGIFY(x) #x
 #define panic_if(x,y) if(x) printf(STRINGIFY(__LINE__) y);abort()
@@ -187,10 +188,22 @@ Exp::~Exp() {
     //nothing
 }
 
-void
-Exp::wipeLLVM() {
+//note this visits the "children" before processing the node
+void Exp::recVisitorBase(VFn vfn,void* opaque) {
+    recVisitor(vfn,opaque);
+    (this->*vfn)(opaque);
+}
+
+void Exp::wipeLLVM(void*) {
     llvmTemp=0;
-    wipeSpecific();
+    wipeSpecific(null_ptr); //call virtual function
+}
+
+void Exp::displayBase(void *opaque) {
+    std::ostream *s=((DisplayRec*)opaque)->s;
+    *s<<"(";
+    display(opaque); //call virtual function
+    *s<<")";
 }
 
 Collection::Collection(vector<ExpPtr> &selts) : Exp(Collection::TYPECODE,0), elts(selts) {
@@ -201,6 +214,12 @@ Collection::~Collection() {
 
 }
 
+void Collection::recVisitor(VFn vfn,void* opaque) {
+    for(auto e : elts) {
+        e->recVisitorBase(vfn,opaque);
+    }
+}
+
 Exp* Collection::childSatisfies(EPred pred,void* opaque) {
 
 }
@@ -209,16 +228,17 @@ Value* Collection::generateSpecific(LLCompilerState& global) {
 
 }
 
-void Collection::wipeSpecific() {
-
+void Collection::wipeSpecific(void*) {
+    //dnt
 }
 
-Value* Collection::ouputNodeIfSpecific(LLCompilerState &gs,ProblemState &ps,uint8_t tgtLoopBodyIdx) {
+Value* Collection::outputNodeIfSpecific(LLCompilerState &gs,ProblemState &ps,uint8_t tgtLoopBodyIdx) {
     return null_ptr;
 }
 
-void Collection::display(ProblemState *ps,ostream &s) {
-
+void Collection::display(void* opaque) {
+    std::ostream *s=((DisplayRec*)opaque)->s;
+    *s<<"Collection";
 }
 
 VarRec::VarRec(Value* sllvmTemp,EltType stype) : Exp(VarRec::TYPECODE,stype) {
@@ -233,7 +253,11 @@ VarRec::~VarRec() {
 
 }
 
-Value* VarRec::ouputNodeIfSpecific(LLCompilerState &gs,ProblemState &ps,uint8_t tgtLoopBodyIdx) {
+void VarRec::recVisitor(VFn vfn,void* opaque) {
+    //dnt
+}
+
+Value* VarRec::outputNodeIfSpecific(LLCompilerState &gs,ProblemState &ps,uint8_t tgtLoopBodyIdx) {
     return null_ptr;
 }
 
@@ -260,7 +284,11 @@ NumLiteral::~NumLiteral() {
 
 }
 
-Value* NumLiteral::ouputNodeIfSpecific(LLCompilerState &gs,ProblemState &ps,uint8_t tgtLoopBodyIdx) {
+void NumLiteral::recVisitor(VFn vfn,void* opaque) {
+    //dnt
+}
+
+Value* NumLiteral::outputNodeIfSpecific(LLCompilerState &gs,ProblemState &ps,uint8_t tgtLoopBodyIdx) {
     return null_ptr;
 }
 
@@ -274,19 +302,20 @@ NumLiteral::generateSpecific(LLCompilerState& global) {
 }
 
 void
-NumLiteral::wipeSpecific() {
-
+NumLiteral::wipeSpecific(void*) {
+    //dnt
 }
 
-void NumLiteral::display(ProblemState *ps,ostream &s) {
+void NumLiteral::display(void* opaque) {
+    std::ostream *s=((DisplayRec*)opaque)->s;
     if(type==FLOAT){
-        s<<"LitDouble "<<fMem;
+        *s<<"LitDouble "<<fMem;
     }else if(type==UINT){
-        s<<"LitUInt "<<uMem;
+        *s<<"LitUInt "<<uMem;
     }else if(type==SINT){
-        s<<"LitUInt "<<sMem;
+        *s<<"LitUInt "<<sMem;
     }else{
-        s<<"Lit malformed";
+        *s<<"Lit malformed";
     }
 }
 
@@ -299,7 +328,11 @@ RandArr::~RandArr() {
 
 }
 
-Value* RandArr::ouputNodeIfSpecific(LLCompilerState &gs,ProblemState &ps,uint8_t tgtLoopBodyIdx) {
+void RandArr::recVisitor(VFn vfn,void* opaque) {
+    //dnt
+}
+
+Value* RandArr::outputNodeIfSpecific(LLCompilerState &gs,ProblemState &ps,uint8_t tgtLoopBodyIdx) {
     return null_ptr;
 }
 
@@ -311,12 +344,13 @@ Value* RandArr::generateSpecific(LLCompilerState& global) {
 
 }
 
-void RandArr::wipeSpecific() {
-
+void RandArr::wipeSpecific(void*) {
+    //dnt
 }
 
-void RandArr::display(ProblemState *ps,ostream &s) {
-
+void RandArr::display(void* opaque) {
+    std::ostream *s=((DisplayRec*)opaque)->s;
+    *s<<"RandomArr";
 }
 
 
@@ -331,7 +365,11 @@ UFnApp::~UFnApp() {
 
 }
 
-Value* UFnApp::ouputNodeIfSpecific(LLCompilerState &gs,ProblemState &ps,uint8_t tgtLoopBodyIdx) {
+void UFnApp::recVisitor(VFn vfn,void* opaque) {
+    //dnt
+}
+
+Value* UFnApp::outputNodeIfSpecific(LLCompilerState &gs,ProblemState &ps,uint8_t tgtLoopBodyIdx) {
     return null_ptr;
 }
 
@@ -350,7 +388,14 @@ Combiner::~Combiner() {
 
 }
 
-Value* Combiner::ouputNodeIfSpecific(LLCompilerState &gs,ProblemState &ps,uint8_t tgtLoopBodyIdx) {
+void Combiner::recVisitor(VFn vfn,void* opaque) {
+    int i;
+    for(i=0;i<opArity[operation];++i){
+        inputs[i]->recVisitorBase(vfn,opaque);
+    }
+}
+
+Value* Combiner::outputNodeIfSpecific(LLCompilerState &gs,ProblemState &ps,uint8_t tgtLoopBodyIdx) {
     Value* vs[3];
     int i;
     for(i=0;i<opArity[operation];++i){
@@ -379,7 +424,17 @@ Traversal::~Traversal() {
 
 }
 
-Value* Traversal::ouputNodeIfSpecific(LLCompilerState &gs,ProblemState &ps,uint8_t tgtLoopBodyIdx) {
+void Traversal::recVisitor(VFn vfn,void* opaque) {
+    for(auto e : body.elts) {
+        e->recVisitorBase(vfn,opaque);
+    }
+    for(auto e1 : accumulations.elts) {
+        e1->recVisitorBase(vfn,opaque);
+    }
+    //fill-in
+}
+
+Value* Traversal::outputNodeIfSpecific(LLCompilerState &gs,ProblemState &ps,uint8_t tgtLoopBodyIdx) {
     return null_ptr;
 }
 
@@ -498,32 +553,33 @@ Value* VarRec::generateSpecific(LLCompilerState& gs) {
     return loadValueFromArraySlot(gs,type,0,0);
 }
 
-void VarRec::wipeSpecific() {
+void VarRec::wipeSpecific(void*) {
     //nothing
 }
 
-void VarRec::display(ProblemState *ps,ostream &s) {
-    s<<"VarRec "<<r->name;
+void VarRec::display(void* opaque) {
+    std::ostream *s=((DisplayRec*)opaque)->s;
+    *s<<"VarRec "<<r->name;
     if(noIdxs>0){
-        s<<".";
+        *s<<".";
         int i;
         for(i=0;i<noIdxs;++i){
             int idx=idxs[i],delta=deltas[i];
             bool brackets=(idx==0 || delta!=0);
             if(brackets){
-                s<<"(";
+                *s<<"(";
             }
             if(idx!=0){
-                s<<"V"<<ps->extents[idx];
+                //*s<<"V"<<ps->extents[idx];
             }
             if(idx==0||delta!=0){
                if(delta>=0){
-                    s<<"+";
+                    *s<<"+";
                 }
-                s<<static_cast<int>(delta);
+                *s<<static_cast<int>(delta);
             }
             if(brackets){
-                s<<")";
+                *s<<")";
             }
         }
     }
@@ -533,17 +589,18 @@ Value* UFnApp::generateSpecific(LLCompilerState& gs) {
     return 0;
 }
 
-void UFnApp::wipeSpecific() {
-    input->wipeLLVM();
+void UFnApp::wipeSpecific(void*) {
+    //dnt
 }
 
-void UFnApp::display(ProblemState *ps,ostream &s) {
-
+void UFnApp::display(void* opaque) {
+    std::ostream *s=((DisplayRec*)opaque)->s;
+    *s<<"UFnApp";
 }
 
 Value* Combiner::generateSpecific(LLCompilerState& gs) {
     Value *as[3];
-    for(int i=0;i<3;++i){
+    for(int i=0;i<opArity[operation];++i){
         //UGH: first argument of select is special case
         if(inputs[i]!=0 && !(i==0 && operation==SELECT)){
             as[i]=typeConvert(gs,type,inputs[i]->generateCode(gs),inputs[i]->type);
@@ -553,24 +610,13 @@ Value* Combiner::generateSpecific(LLCompilerState& gs) {
 
 }
 
-void Combiner::wipeSpecific() {
-#if 0
-    int i;
-    for(i=0;i<2;++i){
-        if(inputs[i]!=0){
-            inputs[i]->wipeLLVM();
-        }
-    }
-#endif
-    for(auto ptr : inputs){
-        if(ptr!=0){
-            ptr->wipeLLVM();
-        }
-    }
+void Combiner::wipeSpecific(void*) {
+    //dnt
 }
 
-void Combiner::display(ProblemState *ps,ostream &s) {
-
+void Combiner::display(void* opaque) {
+    std::ostream *s=((DisplayRec*)opaque)->s;
+    *s<<"Combiner "<<opNames[operation];
 }
 
 
@@ -692,18 +738,20 @@ Value* Traversal::generateSpecific(LLCompilerState& gs) {
 #endif
 }
 
-void Traversal::wipeSpecific() {
-    int i;
+void Traversal::wipeSpecific(void*) {
+    //dnt
+/*    int i;
     for(auto it : body.elts){
-        it->wipeLLVM();
+        it->wipeLLVM(null_ptr);
     }
     for(auto it2 : accumulations.elts){
-        it2->wipeLLVM();
-    }
+        it2->wipeLLVM(null_ptr);
+        }*/
 }
 
-void Traversal::display(ProblemState *ps,ostream &s) {
-
+void Traversal::display(void* opaque) {
+    std::ostream *s=((DisplayRec*)opaque)->s;
+    *s<<"Combiner";
 }
 
 //since this is a DAG, providing we always instantiate the children before the parents the dependencies are ok
@@ -724,7 +772,7 @@ Value* Exp::outputNodeIf(LLCompilerState &gs,ProblemState &ps,uint8_t tgtLoopBod
     if(loopBodyIdx<tgtLoopBodyIdx){
         return null_ptr;
     }
-    Value *v=ouputNodeIfSpecific(gs,ps,tgtLoopBodyIdx);
+    Value *v=outputNodeIfSpecific(gs,ps,tgtLoopBodyIdx);
     return v;
 /*    if(e->output==null_ptr){
 
@@ -813,9 +861,9 @@ int main(int argc,char* argv[]) {
     S(UFnApp);
     S(Combiner);
     S(Traversal);
-#if 0
+#if 1
 //very simple test code
-    ExpPtr AAP(0),BAP(0),CAP(0);
+    ExpPtr AAP(new NumLiteral(double(2))/*0*/),BAP(new NumLiteral(double(2))/*0*/),CAP(new NumLiteral(double(2))/*0*/);
     ExpPtr UAP(new NumLiteral(double(2)));
     ExpPtr VAP(new Combiner(MULTIPLY,FLOAT|W64,AAP,AAP));
     ExpPtr WAP(new Combiner(ADD,FLOAT|W64,AAP,BAP));
@@ -824,6 +872,10 @@ int main(int argc,char* argv[]) {
     ExpPtr ZAP(new Combiner(DIVIDE,FLOAT|W64,XAP,YAP));
     ExpPtr SAP(new Combiner(MULTIPLY,FLOAT|W64,VAP,VAP));
     ExpPtr TAP(new Combiner(ADD,FLOAT|W64,SAP,UAP));
+    DisplayRec dr;
+    dr.ps=0;
+    dr.s=&std::cout;
+    ZAP->recVisitorBase(&Exp::displayBase,&dr);
 #endif
     return 0;
 }
