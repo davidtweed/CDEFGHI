@@ -20,7 +20,7 @@
 #include <vector>
 #include <stdlib.h>
 #include <stdint.h>
-
+#define null_ptr 0
 using namespace std;
 using namespace llvm;
 
@@ -112,9 +112,13 @@ public:
     virtual ~Exp();
     virtual Value* generateSpecific(LLCompilerState& global) = 0;
     virtual void wipeSpecific() = 0;
+    //precondition: tgtLoopBodyIdx>=loopBodyIdx
+    virtual Value* ouputNodeIfSpecific(LLCompilerState &gs,ProblemState &ps,uint8_t tgtLoopBodyIdx)=0;
     //maybe use in pattern matching simplification later
     virtual Exp* childSatisfies(EPred pred,void* opaque)=0;
     virtual void display(ProblemState *ps,ostream &s)=0;
+    //precondition: tgtLoopBodyIdx>=loopBodyIdx-1
+    Value* outputNodeIf(LLCompilerState &gs,ProblemState &ps,uint8_t tgtLoopBodyIdx);
     void wipeLLVM();
     Value* generateCode(LLCompilerState& global);
     VarRec *output;
@@ -131,6 +135,7 @@ public:
     Exp* childSatisfies(EPred pred,void* opaque);
     Value* generateSpecific(LLCompilerState& global);
     void wipeSpecific();
+    Value* ouputNodeIfSpecific(LLCompilerState &gs,ProblemState &ps,uint8_t tgtLoopBodyIdx);
     void display(ProblemState *ps,ostream &s);
     std::vector<ExpPtr> elts;
     static const int TYPECODE=0;
@@ -144,6 +149,7 @@ public:
     Exp* childSatisfies(EPred pred,void* opaque);
     Value* generateSpecific(LLCompilerState& global);
     void wipeSpecific();
+    Value* ouputNodeIfSpecific(LLCompilerState &gs,ProblemState &ps,uint8_t tgtLoopBodyIdx);
     void display(ProblemState *ps,ostream &s);
     union {
         double fMem;
@@ -160,6 +166,7 @@ public:
     Exp* childSatisfies(EPred pred,void* opaque);
     Value* generateSpecific(LLCompilerState& global);
     void wipeSpecific();
+    Value* ouputNodeIfSpecific(LLCompilerState &gs,ProblemState &ps,uint8_t tgtLoopBodyIdx);
     void display(ProblemState *ps,ostream &s);
     ArrRec *r;
     uint8_t idxs[MAX_ARR_DIMS];
@@ -175,6 +182,7 @@ public:
     Exp* childSatisfies(EPred pred,void* opaque);
     Value* generateSpecific(LLCompilerState& global);
     void wipeSpecific();
+    Value* ouputNodeIfSpecific(LLCompilerState &gs,ProblemState &ps,uint8_t tgtLoopBodyIdx);
     void display(ProblemState *ps,ostream &s);
     Value *suffStatsD[MAX_GEN_STATS];
     uint8_t randType;
@@ -187,6 +195,7 @@ public:
     ~UFnApp();
     Value* generateSpecific(LLCompilerState& global);
     void wipeSpecific();
+    Value* ouputNodeIfSpecific(LLCompilerState &gs,ProblemState &ps,uint8_t tgtLoopBodyIdx);
     void display(ProblemState *ps,ostream &s);
     Exp* childSatisfies(EPred pred,void* opaque);
     ExpPtr input;
@@ -199,6 +208,7 @@ struct Combiner : public Exp {
     ~Combiner();
     Value* generateSpecific(LLCompilerState& global);
     void wipeSpecific();
+    Value* ouputNodeIfSpecific(LLCompilerState &gs,ProblemState &ps,uint8_t tgtLoopBodyIdx);
     void display(ProblemState *ps,ostream &s);
     Exp* childSatisfies(EPred pred,void* opaque);
     ExpPtr inputs[3];
@@ -218,6 +228,7 @@ public:
     ~Traversal();
     Value* generateSpecific(LLCompilerState& global);
     void wipeSpecific();
+    Value* ouputNodeIfSpecific(LLCompilerState &gs,ProblemState &ps,uint8_t tgtLoopBodyIdx);
     void display(ProblemState *ps,ostream &s);
     Exp* childSatisfies(EPred pred,void* opaque);
     Collection body;

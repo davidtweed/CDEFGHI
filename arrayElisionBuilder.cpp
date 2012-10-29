@@ -213,6 +213,10 @@ void Collection::wipeSpecific() {
 
 }
 
+Value* Collection::ouputNodeIfSpecific(LLCompilerState &gs,ProblemState &ps,uint8_t tgtLoopBodyIdx) {
+    return null_ptr;
+}
+
 void Collection::display(ProblemState *ps,ostream &s) {
 
 }
@@ -227,6 +231,10 @@ VarRec::VarRec(ArrRec *a,EltType stype) : Exp(VarRec::TYPECODE,stype) {
 
 VarRec::~VarRec() {
 
+}
+
+Value* VarRec::ouputNodeIfSpecific(LLCompilerState &gs,ProblemState &ps,uint8_t tgtLoopBodyIdx) {
+    return null_ptr;
 }
 
 Exp* VarRec::childSatisfies(EPred pred,void* opaque) {
@@ -250,6 +258,10 @@ NumLiteral::NumLiteral(double v) : Exp(NumLiteral::TYPECODE,FLOAT | W64) {
 
 NumLiteral::~NumLiteral() {
 
+}
+
+Value* NumLiteral::ouputNodeIfSpecific(LLCompilerState &gs,ProblemState &ps,uint8_t tgtLoopBodyIdx) {
+    return null_ptr;
 }
 
 Exp* NumLiteral::childSatisfies(EPred pred,void* opaque) {
@@ -287,6 +299,10 @@ RandArr::~RandArr() {
 
 }
 
+Value* RandArr::ouputNodeIfSpecific(LLCompilerState &gs,ProblemState &ps,uint8_t tgtLoopBodyIdx) {
+    return null_ptr;
+}
+
 Exp* RandArr::childSatisfies(EPred pred,void* opaque) {
     return 0;
 }
@@ -315,6 +331,10 @@ UFnApp::~UFnApp() {
 
 }
 
+Value* UFnApp::ouputNodeIfSpecific(LLCompilerState &gs,ProblemState &ps,uint8_t tgtLoopBodyIdx) {
+    return null_ptr;
+}
+
 Exp* UFnApp::childSatisfies(EPred pred,void* opaque) {
     return 0;
 }
@@ -330,6 +350,22 @@ Combiner::~Combiner() {
 
 }
 
+Value* Combiner::ouputNodeIfSpecific(LLCompilerState &gs,ProblemState &ps,uint8_t tgtLoopBodyIdx) {
+    Value* vs[3];
+    int i;
+    for(i=0;i<opArity[operation];++i){
+        vs[i]=inputs[i]->outputNodeIf(gs,ps,tgtLoopBodyIdx);
+        if(vs[i]==null_ptr){ //reload from array
+            vs[i]=0;
+        }
+    }
+    Value *v=0;
+    if(loopBodyIdx==tgtLoopBodyIdx){
+        //cccc
+    }
+    return v;
+}
+
 Exp* Combiner::childSatisfies(EPred pred,void* opaque) {
     return 0;
 }
@@ -342,6 +378,11 @@ Traversal::Traversal(Collection &sbody,Collection &saccumulations,EltType stype)
 Traversal::~Traversal() {
 
 }
+
+Value* Traversal::ouputNodeIfSpecific(LLCompilerState &gs,ProblemState &ps,uint8_t tgtLoopBodyIdx) {
+    return null_ptr;
+}
+
 
 Exp* Traversal::childSatisfies(EPred pred,void* opaque) {
     return 0;
@@ -476,7 +517,7 @@ void VarRec::display(ProblemState *ps,ostream &s) {
                 s<<"V"<<ps->extents[idx];
             }
             if(idx==0||delta!=0){
-                if(delta>=0){
+               if(delta>=0){
                     s<<"+";
                 }
                 s<<static_cast<int>(delta);
@@ -666,11 +707,31 @@ void Traversal::display(ProblemState *ps,ostream &s) {
 }
 
 //since this is a DAG, providing we always instantiate the children before the parents the dependencies are ok
-void generateLoopBody(LLCompilerState &gs,ProblemState &ps,ExpPtr e,uint8_t loopBodyIdx) {
+//loop body indexes are monotonically increasing from parents to children
+/*Value* generateLoopBody(LLCompilerState &gs,ProblemState &ps,uint8_t tgtLoopBodyIdx,ExpPtr e) {
+    if(e->tgtLoopBodyIdx<tgtLoopBodyIdx){
+        return null_ptr;
+    }else{
+        if(e->output==null_ptr){
 
+        }
+        if(e->tgtLoopBodyIdx==tgtLoopBodyIdx){ //if we're at the level we need to emit code for ourselves
+        }//otherwise nothing
+    }
+    }*/
+
+Value* Exp::outputNodeIf(LLCompilerState &gs,ProblemState &ps,uint8_t tgtLoopBodyIdx) {
+    if(loopBodyIdx<tgtLoopBodyIdx){
+        return null_ptr;
+    }
+    Value *v=ouputNodeIfSpecific(gs,ps,tgtLoopBodyIdx);
+    return v;
+/*    if(e->output==null_ptr){
 
     }
-
+    if(e->loopBodyIdx==loopBodyIdx){ //if we're at the level we need to emit code for ourselves
+    }//otherwise nothing*/
+}
 
 Function* createFunctionFromDAG(LLCompilerState &gs,ExpPtr e,const char* const fnName) {
     //generate function prologue ---------------------------------------------------
