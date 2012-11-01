@@ -404,8 +404,8 @@ Value* Combiner::outputNodeIfSpecific(LLCompilerState &gs,ProblemState &ps,uint8
             vs[i]=0;
         }
     }
-    Value *v=0;
-    if(loopBodyIdx==tgtLoopBodyIdx){
+    Value *v=llvmTemp;
+    if(v==null_ptr && loopBodyIdx==tgtLoopBodyIdx){ //only create code if not already processed
         //cccc
     }
     return v;
