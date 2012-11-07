@@ -20,7 +20,7 @@ type RHSArrExp=Either ArrExp String -- Right number
 type OptTy=Maybe Type -- optional type annoation
 data RETree = Nd RETree Op RETree | Ex RHSArrExp deriving (Eq,Show)
 data Stmt=
-     Where String RETree
+     Where (Maybe String) RETree
    | EBlk
    | NamedLitNum ArrExp String
    | SFn ArrExp String [ArrExp]
@@ -127,7 +127,7 @@ pLine=pLineParser [pEBlk,pFCall,pWhere,pDefinition,pNamedLitNum,pMacroUse,pState
 
 pCharStr prd=(pPredChar' prd) `raise` (\x->[x])
 --pWhere::Parser Stmt
-pWhere=(pMatchStr "where") @> (pInit Where) `fl` (pCharStr isGenAlpha) <@ (pMatchStr "=>") `fl` pRETree  <@ (pMatchStr "{")
+pWhere=(pMatchStr "where") @> (pInit Where) `flM` ((pCharStr isGenAlpha) <@ (pMatchStr "=>")) `fl` pRETree  <@ (pMatchStr "{")
 
 pEBlk = (pInit EBlk) <@ (pChar '}')
 
@@ -270,18 +270,31 @@ pEAlt a b c=case a c of
 
 pRHSArrExp = pEAlt pIdxExp pGenNumber
 
+--parse "right-hand-side expression tree"
 pRETree::Parser RETree
-pRETree c=let r@(Just(v1,c0))=(((pInit Ex) `fl` pRHSArrExp) c) in pLTree v1 c0
- where
-   pLTree::RETree->Parser RETree
-   pLTree t c=case pTyBinOp c of
-            Nothing->Just(t,c)
-            (Just(op,c1))->let (Just(v2,c2))=pRHSArrExp c1 in pLTree (Nd t op (Ex v2)) c2
-
+pRETree (c:c1)|c=='(' = case pRETree c1 of
+  Nothing->Nothing
+  Just(v1,(c2:c3))->if c2/=')' then Nothing
+                     else case pTyBinOp c3 of
+                        Nothing->Just(v1,c3)
+                        Just(v2,c4)->case pRETree (dropWS' c4) of
+                                         Nothing->Just(v1,c3)
+                                         Just(v3,c4)->Just(Nd v1 v2 v3,c4)
+pRETree c1=case pRHSArrExp (dropWS' c1) of
+  Nothing->Nothing
+  r@(Just(a,c2))->case pTyBinOp (dropWS' c2) of
+          Nothing->Just(Ex a,c2)
+          Just(op,c2)->case pRETree (dropWS' c2) of
+             Nothing->Just(Ex a,c2)
+             Just(b,c3)->Just(Nd (Ex a) op b,c3)
+{-
+pNRB::Parser RETree->Parser RETree
+pNRB p (c:c1) | c=='(' = let (c2,c3)=span (/=')') c1 in case p c2 of
+-}
 --one odd syntax <-> AST mismatch: write LHS types on LHS identifier but store on the assignment operator
 --also need to stick a dummy operator on front of list
 pStatement::Parser Stmt
-pStatement=(pInit Cpd) `fl` pLHSIdxExp `flM` pTypeAnnote  `fl` pAsgnOp `fl` pRETree
+pStatement=(pInit Cpd) `fl` pLHSIdxExp `flM` pTypeAnnote  `fl` pAsgnOp `fl` (dropWS pRETree)
 
 {-
 toThreeCode::[Stmt]->[Stmt]

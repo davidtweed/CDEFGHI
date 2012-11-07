@@ -3,7 +3,7 @@
 
 #include "llvm/DerivedTypes.h"
 #include "llvm/ExecutionEngine/ExecutionEngine.h"
-#include "llvm/ExecutionEngine/JIT.h"
+#include "llvm/ExecutionEngine/MCJIT.h"
 #include "llvm/ExecutionEngine/JITEventListener.h"
 #include "llvm/LLVMContext.h"
 #include "llvm/Module.h"
