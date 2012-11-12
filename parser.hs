@@ -299,27 +299,33 @@ treeClass _=2
 
 toThreeCode::Int->[Stmt]->[Stmt]
 toThreeCode _ []=[]
-toThreeCode i (r@(Cpd a o ro tree):rs)=let (i',ss,t)=linTree (ro==Nothing) i tree
+toThreeCode i (r@(Cpd a o ro tree):rs)=let (i',ss,t,_)=linTree (ro==Nothing) i tree
                                        in
                                        ss++((Cpd a o ro t):(toThreeCode i' rs))
 toThreeCode i (r:rs)=r:toThreeCode i rs
 
 
+getIds::RETree->[String]
+getIds (Ex (Left (Arr _ ids _)))=ids
+getIds _ = []
+
 --temporary names are always conceptual
-tmpNm::Int->ArrExp
-tmpNm i=Arr ("tv"++show i) [] True
+tmpNm::Int->[String]->ArrExp
+tmpNm i newId=Arr ("tv"++show i) newId True
 
 --Bool is True if binary form acceptable
 --FIXME: need solve index propagation problem
-linTree :: Bool->Int->RETree->(Int,[Stmt],RETree)
-linTree _ i t@(Ex a)=(i,[],t)
-linTree True i (Nd a op b)=let (i1,l1,t1)=linTree False i a
-                               (i2,l2,t2)=linTree False i1 b
-                           in (i2,l1++l2,Nd t1 op t2)
-linTree False i (Nd a op b)=let (i1,l1,t1)=linTree False i a
-                                (i2,l2,t2)=linTree False i1 b
-                                tName=tmpNm i2
-                            in (i2+1,l1++l2++[Cpd tName Nothing Nothing (Nd t1 op t2)],Ex (Left tName))
+linTree :: Bool->Int->RETree->(Int,[Stmt],RETree,[String])
+linTree _ i t@(Ex a)=(i,[],t,getIds t)
+linTree True i (Nd a op b)=let (i1,l1,t1,id1)=linTree False i a
+                               (i2,l2,t2,id2)=linTree False i1 b
+                               newId=id1 `union` id2
+                           in (i2,l1++l2,Nd t1 op t2,newId)
+linTree False i (Nd a op b)=let (i1,l1,t1,id1)=linTree False i a
+                                (i2,l2,t2,id2)=linTree False i1 b
+                                newId=id1 `union` id2
+                                tName=tmpNm i2 newId
+                            in (i2+1,l1++l2++[Cpd tName Nothing Nothing (Nd t1 op t2)],Ex (Left tName),newId)
 
 tt1=Nd (Ex (Left (Arr "d" ["i","j"] False))) (Op "-" Nothing) (Ex (Left (Arr "m" ["j"] False)))
 tt2=Nd (Nd (Ex (Left (Arr "sumSq" ["i","j"] False))) (Op "/" Nothing) (Ex (Left (Arr "count" [] False)))) (Op "-" Nothing) (Nd (Ex (Left (Arr "newMean" ["i"] False))) (Op "*" Nothing) (Ex (Left (Arr "newMean" ["j"] False))))
@@ -357,6 +363,10 @@ stmtAsC (Cpd l ty red expr)=wrapCNew (arrToC l) (sh red)
   sh Nothing=let (o,s)=treeAsArgs expr in ("Combiner",o++","++doubleC++","++s)
   sh (Just c)=("Traversal","a")
 stmtAsC _ = "Whee"
+
+union xs []=xs
+union [] xs=xs
+union xs ys=[x | x<-xs, not(x `elem` ys)]++ys
 
 fromLeft (Left x)=x
 fromLeft v = error ("not a Left:"++show v)
