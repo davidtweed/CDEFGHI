@@ -355,7 +355,8 @@ varToC::String->String
 varToC l=l++"AP"
 arrToC (Arr l _ _)=varToC l
 
-wrapCNew v (t,a)="ExpPtr "++v++"(new "++t++"("++a++"));"
+indent="    "
+wrapCNew v (t,a)=indent++"ExpPtr "++v++"(new "++t++"("++a++"));"
 
 stmtAsC (NamedLitNum (Arr n _ _) v)=wrapCNew (varToC n) ("NumLiteral","double("++v++")")
 stmtAsC (Cpd l ty red expr)=wrapCNew (arrToC l) (sh red)
@@ -389,6 +390,12 @@ processStrE=unlines.map (show).parse
 pFileE s=do j<-readFile s
             (putStr.processStrE) j
 
-pp n=pFileE ("TESTS/parseT"++show n++".txt")
-pp3 s=do j<-readFile ("TESTS/parseT"++show s++".txt")
+rNm n="TESTS/parseT"++show n++".txt"
+pp n=pFileE (rNm n)
+pp3 n=do j<-readFile (rNm n)
          (putStr.unlines.map show.toThreeCode 0.map (fst.fromJust).parse) j
+
+pp4 n=do j<-readFile (rNm n)
+         putStr ("void testFn"++show n++"(ArrayMeta *md) {\n")
+         (putStr.unlines.map stmtAsC.toThreeCode 0.map (fst.fromJust).parse) j
+         putStr "}\n"
