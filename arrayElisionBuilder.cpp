@@ -2,7 +2,7 @@
 #include <iostream>
 
 #define STRINGIFY(x) #x
-#define panic_if(x,y) if(x) printf(STRINGIFY(__LINE__) y);abort()
+#define panic_if(x,y,v) if(x) { std::cerr<<(STRINGIFY(__LINE__) y)<<STRINGIFY(v)<<"="<<v<<std::endl<<std::flush;abort(); }
 
 #define BLK(v,n) const EltType v=n<<SHIFT_AMT
 
@@ -82,6 +82,90 @@ Type* llvmType(EltType e) {
     return typeDB[fundamentalTypeCode(e)][e&7];
 }
 
+
+//matches formulae used in ref() in array.jl
+int idxsToLinear(LLCompilerState& gs,ArrRec *arrRec,int *idxs) {
+
+    int v=idxs[arrRec->noDims-1];
+    int i;
+    for(i=arrRec->noDims-2;i>=0;--i){
+        /*
+          v=v*gs.traversalRanges[arrRec->origSzIdxs[i+1]][3]+idxs[i];*/
+    }
+    return v;
+}
+
+template<typename U,typename T>
+class TinyMap {
+public:
+    U keys[8];
+    T vals[8];
+    int sz;
+    T* lookup(U &k) {
+        int i;
+        for(i=0;i<sz;++i){
+            if(keys[i]==k){
+                return &(vals[i]);
+            }
+        }
+        return null_ptr;
+    }
+};
+
+Value* getIdxValue(LLCompilerState& gs,ProblemState &ps,int arrNo,TinyMap<int8_t,Value*> &idxs,int idxNo) {
+    Value **id=idxs.lookup(ps.arrays->idxToExtent[idxNo]);
+    assert(id!=0 && "index not found");
+    Value *v=*id;
+    if(0){//add on delta
+
+    }
+    return v;
+}
+
+//produce integer indexing into an array with constant dimension but Value* indices
+Value* idxsToLinearSymbolic(LLCompilerState& gs,ProblemState &ps,int arrNo,TinyMap<int8_t,Value*> &idxs) {
+    Value* v=CST(0);
+    if(ps.arrays->noDims!=0){
+        Value *v=getIdxValue(gs,ps,arrNo,idxs,0);
+        Value *mul=CST(1);
+        int i;
+        for(i=1;i<ps.arrays->noDims;++i){
+            mul=gs.builder->CreateMul(mul,CST(ps.arrays->idxToExtent[i]));
+            Value *id=getIdxValue(gs,ps,arrNo,idxs,i);
+            v=gs.builder->CreateAdd(v,gs.builder->CreateMul(id,mul));
+        }
+    }
+    return v;
+}
+
+Value* createGEP(LLCompilerState& gs,EltType t,ProblemState &ps,int arrNo,TinyMap<int8_t,Value*> &idxs) {
+    Value* idxVar=idxsToLinearSymbolic(gs,ps,arrNo,idxs);
+    Value* indexes[2]={CST(0),idxVar};
+    return gs.builder->CreateGEP(ps.arrays->basePtr,ArrayRef<Value*>(indexes));
+}
+
+Value* loadValueFromArraySlot(LLCompilerState& gs,EltType t,ProblemState &ps,int arrNo,TinyMap<int8_t,Value*> &idxs) {
+    return gs.builder->CreateLoad(createGEP(gs,t,ps,arrNo,idxs));
+}
+
+Value* storeValueToArraySlot(LLCompilerState& gs,EltType t,ProblemState &ps,int arrNo,TinyMap<int8_t,Value*> &idxs,Value* value) {
+    return gs.builder->CreateStore(createGEP(gs,t,ps,arrNo,idxs),value);
+}
+
+/*take an array record, a group of master indexs to index into it in order and a group
+ *of literal deltas and convert into a group of LLVM Value* of current variables to
+ *index into the array
+ */
+void getActualIdxs(Value **output,LLCompilerState& gs,ArrRec *r,int8_t *masterIdxs,int8_t *deltas) {
+    int i;
+    for(i=0;i<r->noDims;++r){
+        output[i]=gs.curIdxVars[masterIdxs[i]];
+        if(deltas[i]!=0){ //need to modify the index
+            output[i]=gs.builder->CreateAdd(output[i],CST(deltas[i]));
+        }
+    }
+}
+
 Value* getAccumInitialiser(Operation op,EltType type) {
     switch(op){
         /*OP(ADD,0.0f,0LL);
@@ -92,7 +176,7 @@ Value* getAccumInitialiser(Operation op,EltType type) {
     case MIN: return mkConst(type,-1*(int64_t(1)<<(8*(type & 7)-1)));
     case OR: return mkConst(type,0);
     case AND: return mkConst(type,1);
-    default:panic_if(1,"unhandled reduce start value");
+    default:panic_if(1,"unhandled reduce start value",op);
     }
 #undef OP
 }
@@ -123,7 +207,7 @@ Value* makeLLVMBinOp(LLCompilerState &gs,Operation op,EltType type,Value **args)
 //fma
         }
 #undef OP
-        panic_if(1,"unhandled unary operator");
+        panic_if(1,"unhandled unary operator",op);
     }
     //binary operations -------------------------------------------------
     Value *a1=args[1];
@@ -162,7 +246,7 @@ Value* makeLLVMBinOp(LLCompilerState &gs,Operation op,EltType type,Value **args)
             SOD3(MAX,CreateICmpUGT,CreateICmpSGT,CreateFCmpOGT);
 #undef SO
         }
-        panic_if(1,"unhandled binary operator");
+        panic_if(1,"unhandled binary operator",op);
     }
     //ternary operations ------------------------------------------------
     Value *a2=args[2];
@@ -171,9 +255,9 @@ Value* makeLLVMBinOp(LLCompilerState &gs,Operation op,EltType type,Value **args)
         case SELECT: return gs.builder->CreateSelect(a0,a1,a2);
         case FMA: return gs.builder->CreateSelect(a0,a1,a2);
         }
-        panic_if(1,"unhandled ternary operator");
+        panic_if(1,"unhandled ternary operator",op);
     }
-    panic_if(1,"unhandled operator");
+    panic_if(1,"unhandled operator",op);
 }
 
 Exp::Exp(uint8_t snodeType,EltType stype) {
@@ -232,7 +316,7 @@ void Collection::wipeSpecific(void*) {
     //dnt
 }
 
-Value* Collection::outputNodeIfSpecific(LLCompilerState &gs,ProblemState &ps,uint8_t tgtLoopBodyIdx) {
+Value* Collection::outputNodeIfSpecific(LLCompilerState &gs,ProblemState &ps,LoopStatus &ls,uint8_t tgtLoopBodyIdx) {
     return null_ptr;
 }
 
@@ -257,8 +341,23 @@ void VarRec::recVisitor(VFn vfn,void* opaque) {
     //dnt
 }
 
-Value* VarRec::outputNodeIfSpecific(LLCompilerState &gs,ProblemState &ps,uint8_t tgtLoopBodyIdx) {
-    return null_ptr;
+//precondition: all indices to satisfy var occur in ls
+Value* VarRec::outputNodeIfSpecific(LLCompilerState &gs,ProblemState &ps,LoopStatus &ls,uint8_t tgtLoopBodyIdx) {
+    //associate actual indices to variables
+    Value* idxVs[MAX_ARR_DIMS];
+    for(int i=0;i<noIdxs;++i){
+        for(int j=0;j<ls.depth;++j){
+            if(idxs[i]==ls.globalExtents[j]){
+                idxVs[i]=ls.inductionVars[j];
+                if(deltas[i]!=0){
+                    //add value to induction var
+                }
+                break;
+            }
+        }
+    }
+    //for appropriate GEP vvvv
+    return 0;//loadValueFromArraySlot();
 }
 
 Exp* VarRec::childSatisfies(EPred pred,void* opaque) {
@@ -288,8 +387,12 @@ void NumLiteral::recVisitor(VFn vfn,void* opaque) {
     //dnt
 }
 
-Value* NumLiteral::outputNodeIfSpecific(LLCompilerState &gs,ProblemState &ps,uint8_t tgtLoopBodyIdx) {
-    return null_ptr;
+Value* NumLiteral::outputNodeIfSpecific(LLCompilerState &gs,ProblemState &ps,LoopStatus &ls,uint8_t tgtLoopBodyIdx) {
+    /*if(type & FLOAT){
+        return ConstantDouble(gs.TheLLVMContext,APFloat(fMem));
+        }else*/{
+        return ConstantInt::get(getGlobalContext(),APInt(32,sMem));
+    }
 }
 
 Exp* NumLiteral::childSatisfies(EPred pred,void* opaque) {
@@ -332,7 +435,7 @@ void RandArr::recVisitor(VFn vfn,void* opaque) {
     //dnt
 }
 
-Value* RandArr::outputNodeIfSpecific(LLCompilerState &gs,ProblemState &ps,uint8_t tgtLoopBodyIdx) {
+Value* RandArr::outputNodeIfSpecific(LLCompilerState &gs,ProblemState &ps,LoopStatus &ls,uint8_t tgtLoopBodyIdx) {
     return null_ptr;
 }
 
@@ -369,7 +472,7 @@ void UFnApp::recVisitor(VFn vfn,void* opaque) {
     //dnt
 }
 
-Value* UFnApp::outputNodeIfSpecific(LLCompilerState &gs,ProblemState &ps,uint8_t tgtLoopBodyIdx) {
+Value* UFnApp::outputNodeIfSpecific(LLCompilerState &gs,ProblemState &ps,LoopStatus &ls,uint8_t tgtLoopBodyIdx) {
     return null_ptr;
 }
 
@@ -395,11 +498,11 @@ void Combiner::recVisitor(VFn vfn,void* opaque) {
     }
 }
 
-Value* Combiner::outputNodeIfSpecific(LLCompilerState &gs,ProblemState &ps,uint8_t tgtLoopBodyIdx) {
+Value* Combiner::outputNodeIfSpecific(LLCompilerState &gs,ProblemState &ps,LoopStatus &ls,uint8_t tgtLoopBodyIdx) {
     Value* vs[3];
     int i;
     for(i=0;i<opArity[operation];++i){
-        vs[i]=inputs[i]->outputNodeIf(gs,ps,tgtLoopBodyIdx);
+        vs[i]=inputs[i]->outputNodeIf(gs,ps,ls,tgtLoopBodyIdx);
         if(vs[i]==null_ptr){ //reload from array
             vs[i]=0;
         }
@@ -434,7 +537,7 @@ void Traversal::recVisitor(VFn vfn,void* opaque) {
     //fill-in
 }
 
-Value* Traversal::outputNodeIfSpecific(LLCompilerState &gs,ProblemState &ps,uint8_t tgtLoopBodyIdx) {
+Value* Traversal::outputNodeIfSpecific(LLCompilerState &gs,ProblemState &ps,LoopStatus &ls,uint8_t tgtLoopBodyIdx) {
     return null_ptr;
 }
 
@@ -482,57 +585,7 @@ Value* typeConvert(LLCompilerState &gs,EltType outT,Value *v,EltType inT) {
         }
     }
     //reaching here we didn't match anything
-    panic_if(1,"unhandled type conversion");
-}
-
-//matches formulae used in ref() in array.jl
-int idxsToLinear(LLCompilerState& gs,ArrRec *arrRec,int *idxs) {
-    int v=idxs[arrRec->noDims-1];
-    int i;
-    for(i=arrRec->noDims-2;i>=0;--i){
-        /*
-          v=v*gs.traversalRanges[arrRec->origSzIdxs[i+1]][3]+idxs[i];*/
-    }
-    return v;
-}
-
-//produce integer indexing into an array with constant dimension but Value* indices
-Value* idxsToLinearSymbolic(LLCompilerState& gs,ArrRec *arrRec,Value **idxs) {
-    Value* v=idxs[arrRec->noDims-1];
-    int i;
-    for(i=arrRec->noDims-2;i>=0;--i){/*
-                                       v=gs.builder->CreateAdd(gs.builder->CreateMul(v,
-                                       CST(gs.traversalRanges[arrRec->origSzIdxs[i+1]][3])),idxs[i]);*/
-    }
-    return v;
-}
-
-Value* loadValueFromArraySlot(LLCompilerState& gs,EltType t,ArrRec *arrRec,Value **idxs) {
-    Value* idxVar=idxsToLinearSymbolic(gs,arrRec,idxs);
-    Value* indexes[2]={CST(0),idxVar};
-    Value *ptr=gs.builder->CreateGEP(arrRec->basePtr,ArrayRef<Value*>(indexes));
-    return gs.builder->CreateLoad(ptr);
-}
-
-Value* storeValueToArraySlot(LLCompilerState& gs,EltType t,ArrRec *arrRec,Value **idxs,Value *value) {
-    Value* idxVar=idxsToLinearSymbolic(gs,arrRec,idxs);
-    Value* indexes[3]={CST(0),idxVar};
-    Value *ptr=gs.builder->CreateGEP(arrRec->basePtr,ArrayRef<Value*>(indexes));
-    return gs.builder->CreateStore(ptr,value);
-}
-
-/*take an array record, a group of master indexs to index into it in order and a group
- *of literal deltas and convert into a group of LLVM Value* of current variables to
- *index into the array
- */
-void getActualIdxs(Value **output,LLCompilerState& gs,ArrRec *r,uint8_t *masterIdxs,int8_t *deltas) {
-    int i;
-    for(i=0;i<r->noDims;++r){
-        output[i]=gs.curIdxVars[masterIdxs[i]];
-        if(deltas[i]!=0){ //need to modify the index
-            output[i]=gs.builder->CreateAdd(output[i],CST(deltas[i]));
-        }
-    }
+    panic_if(1,"unhandled type conversion",outT);
 }
 
 Value* Exp::generateCode(LLCompilerState& gs) {
@@ -756,7 +809,7 @@ void Traversal::display(void* opaque) {
 
 //since this is a DAG, providing we always instantiate the children before the parents the dependencies are ok
 //loop body indexes are monotonically increasing from parents to children
-/*Value* generateLoopBody(LLCompilerState &gs,ProblemState &ps,uint8_t tgtLoopBodyIdx,ExpPtr e) {
+/*Value* generateLoopBody(LLCompilerState &gs,ProblemState &ps,LoopStatus &ls,uint8_t tgtLoopBodyIdx,ExpPtr e) {
     if(e->tgtLoopBodyIdx<tgtLoopBodyIdx){
         return null_ptr;
     }else{
@@ -768,11 +821,11 @@ void Traversal::display(void* opaque) {
     }
     }*/
 
-Value* Exp::outputNodeIf(LLCompilerState &gs,ProblemState &ps,uint8_t tgtLoopBodyIdx) {
+Value* Exp::outputNodeIf(LLCompilerState &gs,ProblemState &ps,LoopStatus &ls,uint8_t tgtLoopBodyIdx) {
     if(loopBodyIdx<tgtLoopBodyIdx){
         return null_ptr;
     }
-    Value *v=outputNodeIfSpecific(gs,ps,tgtLoopBodyIdx);
+    Value *v=outputNodeIfSpecific(gs,ps,ls,tgtLoopBodyIdx);
     return v;
 /*    if(e->output==null_ptr){
 

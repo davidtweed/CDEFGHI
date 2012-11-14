@@ -63,27 +63,36 @@ public:
     Value *neutral;
 };
 #endif
-const int MAX_TOT_DIMS=256;
+const int MAX_TOT_DIMS=127;
 const int MAX_ARR_DIMS=3;
+const int LO=0;
+const int HI=1;
+const int DIM=2;
 
 //difference between sizes and allocd can arise from "where" clauses
 //probably difficult to alloc more than 2^32 floats on desktop machine, but maybe with mmap on an SSD...
 struct ArrRec {
     Value *basePtr;
     char *name;
-    uint8_t origSzIdxs[MAX_ARR_DIMS];
-    uint8_t sizes[MAX_ARR_DIMS];
-    uint8_t allocd[MAX_ARR_DIMS];
+    int8_t idxToExtent[MAX_ARR_DIMS];
+    int8_t sizes[MAX_ARR_DIMS];
+    int8_t allocd[MAX_ARR_DIMS];
     EltType type;
     uint8_t noDims;
     uint8_t needsMaterialisation;
 };
 //extent[0] is always a special zero value
 struct ProblemState {
+    Value *extentDataLLVM[MAX_TOT_DIMS][DIM+1];
     Index extents[MAX_TOT_DIMS];
     int fstUnusedExtent;
     int noArrays;
     ArrRec* arrays;
+};
+struct LoopStatus {
+    int depth;
+    int globalExtents[MAX_ARR_DIMS];
+    Value* inductionVars[MAX_ARR_DIMS];
 };
 struct DisplayRec {
     ProblemState *ps;
@@ -103,7 +112,7 @@ public:
     };*/
 struct TraversalRange {
     //ranges are {iterStart,iterStop,dimensionMax}
-    Index bnds[3];
+    Index bnds[DIM+1];
     ExpPtr *where; //actual expression used in where clause
     Value *llvmValues[2]; //scalar index that holds value containing idx
     //0-OUT, 1-IN
@@ -119,21 +128,21 @@ public:
     virtual Value* generateSpecific(LLCompilerState& global) = 0;
     virtual void wipeSpecific(void*) = 0;
     //precondition: tgtLoopBodyIdx>=loopBodyIdx
-    virtual Value* outputNodeIfSpecific(LLCompilerState &gs,ProblemState &ps,uint8_t tgtLoopBodyIdx)=0;
+    virtual Value* outputNodeIfSpecific(LLCompilerState &gs,ProblemState &ps,LoopStatus &ls,uint8_t tgtLoopBodyIdx)=0;
     //maybe use in pattern matching simplification later
     virtual Exp* childSatisfies(EPred pred,void* opaque)=0;
     virtual void display(void* opaque)=0;
     virtual void recVisitor(VFn vfn,void* opaque)=0;
     void recVisitorBase(VFn vfn,void* opaque);
     //precondition: tgtLoopBodyIdx>=loopBodyIdx-1
-    Value* outputNodeIf(LLCompilerState &gs,ProblemState &ps,uint8_t tgtLoopBodyIdx);
+    Value* outputNodeIf(LLCompilerState &gs,ProblemState &ps,LoopStatus &ls,uint8_t tgtLoopBodyIdx);
     void wipeLLVM(void*);
     void displayBase(void *opaque);
     Value* generateCode(LLCompilerState& global);
     VarRec *output;
     Value *llvmTemp;
     Bitmask idxsInKids; //bitmask of indexes used in child nodes
-    EltType type; //unless subclass specisfies real in-type == out-type
+    EltType type; //unless subclass specifies real in-type == out-type
     uint8_t loopBodyIdx;
     uint8_t nodeType;
 };
@@ -145,7 +154,7 @@ public:
     void recVisitor(VFn vfn,void* opaque);
     Value* generateSpecific(LLCompilerState& global);
     void wipeSpecific(void*);
-    Value* outputNodeIfSpecific(LLCompilerState &gs,ProblemState &ps,uint8_t tgtLoopBodyIdx);
+    Value* outputNodeIfSpecific(LLCompilerState &gs,ProblemState &ps,LoopStatus &ls,uint8_t tgtLoopBodyIdx);
     void display(void* opaque);
     std::vector<ExpPtr> elts;
     static const int TYPECODE=0;
@@ -160,7 +169,7 @@ public:
     Exp* childSatisfies(EPred pred,void* opaque);
     Value* generateSpecific(LLCompilerState& global);
     void wipeSpecific(void*);
-    Value* outputNodeIfSpecific(LLCompilerState &gs,ProblemState &ps,uint8_t tgtLoopBodyIdx);
+    Value* outputNodeIfSpecific(LLCompilerState &gs,ProblemState &ps,LoopStatus &ls,uint8_t tgtLoopBodyIdx);
     void display(void* opaque);
     union {
         double fMem;
@@ -168,6 +177,21 @@ public:
         uint64_t uMem;
     };
     static const int TYPECODE=1;
+};
+#define SmVector vector
+class IdxRec {
+public:
+    IdxRec() {
+
+    }
+IdxRec(SmVector<int8_t> &sidxs) : idxs(sidxs) {
+        //nothing
+    }
+IdxRec(SmVector<int8_t> &sidxs,SmVector<int8_t> &sdeltas) : idxs(sidxs), deltas(sdeltas) {
+
+    }
+    SmVector<int8_t> idxs;
+    SmVector<int8_t> deltas;
 };
 class VarRec : public Exp {
 public:
@@ -178,10 +202,10 @@ public:
     Exp* childSatisfies(EPred pred,void* opaque);
     Value* generateSpecific(LLCompilerState& global);
     void wipeSpecific(void*);
-    Value* outputNodeIfSpecific(LLCompilerState &gs,ProblemState &ps,uint8_t tgtLoopBodyIdx);
+    Value* outputNodeIfSpecific(LLCompilerState &gs,ProblemState &ps,LoopStatus &ls,uint8_t tgtLoopBodyIdx);
     void display(void* opaque);
     ArrRec *r;
-    uint8_t idxs[MAX_ARR_DIMS];
+    int8_t idxs[MAX_ARR_DIMS];
     int8_t deltas[MAX_ARR_DIMS];
     int8_t noIdxs;
     static const int TYPECODE=2;
@@ -195,7 +219,7 @@ public:
     Exp* childSatisfies(EPred pred,void* opaque);
     Value* generateSpecific(LLCompilerState& global);
     void wipeSpecific(void*);
-    Value* outputNodeIfSpecific(LLCompilerState &gs,ProblemState &ps,uint8_t tgtLoopBodyIdx);
+    Value* outputNodeIfSpecific(LLCompilerState &gs,ProblemState &ps,LoopStatus &ls,uint8_t tgtLoopBodyIdx);
     void display(void* opaque);
     Value *suffStatsD[MAX_GEN_STATS];
     uint8_t randType;
@@ -209,7 +233,7 @@ public:
     void recVisitor(VFn vfn,void* opaque);
     Value* generateSpecific(LLCompilerState& global);
     void wipeSpecific(void*);
-    Value* outputNodeIfSpecific(LLCompilerState &gs,ProblemState &ps,uint8_t tgtLoopBodyIdx);
+    Value* outputNodeIfSpecific(LLCompilerState &gs,ProblemState &ps,LoopStatus &ls,uint8_t tgtLoopBodyIdx);
     void display(void* opaque);
     Exp* childSatisfies(EPred pred,void* opaque);
     ExpPtr input;
@@ -223,7 +247,7 @@ struct Combiner : public Exp {
     void recVisitor(VFn vfn,void* opaque);
     Value* generateSpecific(LLCompilerState& global);
     void wipeSpecific(void*);
-    Value* outputNodeIfSpecific(LLCompilerState &gs,ProblemState &ps,uint8_t tgtLoopBodyIdx);
+    Value* outputNodeIfSpecific(LLCompilerState &gs,ProblemState &ps,LoopStatus &ls,uint8_t tgtLoopBodyIdx);
     void display(void* opaque);
     Exp* childSatisfies(EPred pred,void* opaque);
     ExpPtr inputs[3];
@@ -244,7 +268,7 @@ public:
     void recVisitor(VFn vfn,void* opaque);
     Value* generateSpecific(LLCompilerState& global);
     void wipeSpecific(void*);
-    Value* outputNodeIfSpecific(LLCompilerState &gs,ProblemState &ps,uint8_t tgtLoopBodyIdx);
+    Value* outputNodeIfSpecific(LLCompilerState &gs,ProblemState &ps,LoopStatus &ls,uint8_t tgtLoopBodyIdx);
     void display(void* opaque);
     Exp* childSatisfies(EPred pred,void* opaque);
     Collection body;

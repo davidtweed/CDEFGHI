@@ -7,7 +7,7 @@ LIBS=
 
 runit: ${OBJS} ${HEADERS}
 #	@echo LD runit
-	${GPP} ${CXXOPTS} -o runit ${OBJS} `llvm-config --cppflags --ldflags --libs core jit native` ${LIBS}
+	${GPP} ${CXXOPTS} -o runit ${OBJS} `llvm-config --cppflags --ldflags --libs core mcjit native` ${LIBS}
 
 
 %.o:%.cpp ${HEADERS}
