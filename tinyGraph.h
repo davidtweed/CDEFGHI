@@ -18,7 +18,7 @@ struct TinyGraph {
     Int4 edgeReps[0];
 };
 
-int positionInWord
+int positionInWord;
 
 inline
 int redundantEdge(Int4 hdMask,Int4 tlMask,Int4 heads,Int4 tails) {

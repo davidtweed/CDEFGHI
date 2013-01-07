@@ -139,8 +139,7 @@ Value* idxsToLinearSymbolic(LLCompilerState& gs,ProblemState &ps,int arrNo,TinyM
 }
 
 Value* createGEP(LLCompilerState& gs,EltType t,ProblemState &ps,int arrNo,TinyMap<int8_t,Value*> &idxs) {
-    Value* idxVar=idxsToLinearSymbolic(gs,ps,arrNo,idxs);
-    Value* indexes[2]={CST(0),idxVar};
+    Value* indexes[2]={CST(0),idxsToLinearSymbolic(gs,ps,arrNo,idxs)};
     return gs.builder->CreateGEP(ps.arrays->basePtr,ArrayRef<Value*>(indexes));
 }
 
@@ -411,14 +410,15 @@ NumLiteral::wipeSpecific(void*) {
 
 void NumLiteral::display(void* opaque) {
     std::ostream *s=((DisplayRec*)opaque)->s;
+    *s<<"Lit";
     if(type==FLOAT){
-        *s<<"LitDouble "<<fMem;
+        *s<<"Double "<<fMem;
     }else if(type==UINT){
-        *s<<"LitUInt "<<uMem;
+        *s<<"UInt "<<uMem;
     }else if(type==SINT){
-        *s<<"LitUInt "<<sMem;
+        *s<<"UInt "<<sMem;
     }else{
-        *s<<"Lit malformed";
+        *s<<"malformed";
     }
 }
 
@@ -889,7 +889,7 @@ Function* createFunctionFromDAG(LLCompilerState &gs,ExpPtr e,const char* const f
     return TheFunction;
 }
 
-/*Typing:
+/*Should this be in C++? Typing:
  *A_idxsetA = B_idxsetB op C_idxsetC
  *where idxsetA only contains indexes from B and C,
  *then indexset of A can be constructed
@@ -898,6 +898,9 @@ Function* createFunctionFromDAG(LLCompilerState &gs,ExpPtr e,const char* const f
  *
  */
 
+void extentPropagate(ProblemState &ps,ExpPtr *root) {
+
+}
 
 /*Exp* is a DAG, so need to assign llvmTemp in process.
  *Also MUST return if llvmTemp set since other node content may not be valid.
