@@ -5,8 +5,10 @@
 
 typedef uint32_t SBitvector;
 
-inline SSBitvector cup(SBitvector a,SBitvector b) { return a | b; }
-inline SSBitvector cap(SBitvector a,SBitvector b) { return a & b; }
+inline SBitvector cup(SBitvector a,SBitvector b) { return a | b; }
+inline SBitvector cap(SBitvector a,SBitvector b) { return a & b; }
 
+
+inline int log2(SBitvector v) { return 0; }
 
 #endif /*__SMALL_BITVECTORS_H__*/

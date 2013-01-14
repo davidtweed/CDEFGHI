@@ -2,7 +2,7 @@ GPP=/usr/local/bin/g++
 CXXOPTS=-g --std=c++11
 DEFS=-D__STDC_LIMIT_MACROS -D__STDC_CONSTANT_MACROS
 HEADERS=arrayElisionBuilder.h
-OBJS=arrayElisionBuilder.o
+OBJS=arrayElisionBuilder.o linearRangeProperties.o
 LIBS=
 
 runit: ${OBJS} ${HEADERS}
