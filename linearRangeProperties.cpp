@@ -45,7 +45,7 @@ void formTable(T* elts,int len,int log2len,int depth,F combiner) {
         int idx1=IDX2(i-1,log2len,0);
         int idx2=idx1 | delta;
         do{
-            elts[idx0]=combiner(elts[idx1],elts[idx2]);
+            elts[idx0]=combiner(elts+idx1,elts+idx2);
             ++idx0;
             ++idx1;
             ++idx2;
@@ -66,8 +66,8 @@ void formTable2(T* elts1,T* elts2,int len,int log2len,int depth,F1 combiner1,F2 
         int idx1=IDX2(i-1,log2len,0);
         int idx2=idx1 | delta;
         do{
-            elts1[idx0]=combiner1(elts1[idx1],elts2[idx2]);
-            elts2[idx0]=combiner2(elts1[idx1],elts2[idx2]);
+            elts1[idx0]=combiner1(elts1+idx1,elts2+idx2);
+            elts2[idx0]=combiner2(elts1+idx1,elts2+idx2);
             ++idx0;
             ++idx1;
             ++idx2;

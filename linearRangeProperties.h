@@ -4,11 +4,18 @@
 #include "smallBitvectors.h"
 #include <algorithm>
 
+typedef uint8_t __attribute__((vector_size(16))) U8V;
+
 //macros just so literally used at call-site, increasing chance of being totally inlined
-#define AND_LAMBDA [] (uint8_t x,uint8_t y) { return x & y;}
-#define OR_LAMBDA [] (uint8_t x,uint8_t y) { return x | y;}
-#define MIN_LAMBDA [] (uint8_t x,uint8_t y) { return std::min(x,y);}
-#define MAX_LAMBDA [] (uint8_t x,uint8_t y) { return std::max(x,y);}
+#define AND_LAMBDA [] (uint8_t *x,uint8_t *y) -> uint8_t { return *x & *y;}
+#define OR_LAMBDA [] (uint8_t *x,uint8_t *y) -> uint8_t { return *x | *y;}
+#define MIN_LAMBDA [] (uint8_t *x,uint8_t *y) -> uint8_t { return std::min(*x,*y);}
+#define MAX_LAMBDA [] (uint8_t *x,uint8_t *y) -> uint8_t { return std::max(*x,*y);}
+
+#define AND_LAMBDAV [] (uint8_t *x,uint8_t *y) -> U8V { return *x & *y;}
+#define OR_LAMBDAV [] (uint8_t *x,uint8_t *y) -> U8V { return *x | *y;}
+#define MIN_LAMBDAV [] (uint8_t *x,uint8_t *y) -> U8V { return std::min(*x,*y);}
+#define MAX_LAMBDAV [] (uint8_t *x,uint8_t *y) -> U8V { return std::max(*x,*y);}
 
 #define IDX2(d,log2len,i) (((d)<<(log2len)) | (i))
 extern int log2T[256];
@@ -33,9 +40,14 @@ void formUnionTable(uint8_t *elts,int len,int log2len,int depth);
 void formIntersectTable(uint8_t *elts,int len,int log2len,int depth);
 
 // ====== accessor functions ==============================
-template<typename T,typename F>
-inline T valueOverRange(T* tbl,SplitIdx idx,F combiner) {
-    return combiner(tbl[idx.i[0]],tbl[idx.i[1]]);
+template<typename F>
+inline uint8_t valueOverRange(uint8_t* tbl,SplitIdx idx,F combiner) {
+    return combiner(tbl+idx.i[0],tbl+idx.i[1]);
+}
+
+template<typename F>
+inline U8V valueOverRangeV(uint8_t* tbl,SplitIdx idx,F combiner) {
+    return combiner(tbl+idx.i[0],tbl+idx.i[1]);
 }
 
 inline uint8_t andValueOverRange(uint8_t *tbl,SplitIdx idx) {
