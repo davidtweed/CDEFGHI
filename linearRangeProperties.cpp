@@ -1,5 +1,7 @@
 #include "linearRangeProperties.h"
 #include <algorithm>
+#include <iostream>
+#include <assert.h>
 
 using namespace std;
 
@@ -17,6 +19,18 @@ int log2T[256]={0, 0, 1, 1, 2, 2, 2, 2, 3, 3, 3, 3, 3, 3, 3, 3,
 //NOTE: one way of determining if bitsets A_i == A_{i+1} == ... == A_j is to test if
 //union(A_i,...,A_j) == intersection(A_i,...,A_j). This is useful because unions can
 //be precomputed whereas direct equality tests can't (quite).
+
+void displayTable(uint8_t* tbl,int len,int log2len) {
+    int d,i;
+    for(d=0;d<log2T[len];++d){
+        std::cerr<<"D"<<d<<"    ";
+        for(i=0;i<len;++i){
+            std::cerr<<i<<":"<<static_cast<int>(tbl[IDX2(d,log2len,i)])<<" ";
+        }
+        std::cerr<<"\n";
+    }
+    std::cerr<<"\n";
+}
 
 // ========== building tables ===================
 
@@ -41,14 +55,16 @@ void formTable(T* elts,int len,int log2len,int depth,F combiner) {
     int i=1;
     do{
         int idx0=IDX2(i,log2len,0);
-        int lim=idx0 | (len-delta);
+        int lim=idx0 | (len-2*delta+1);
         int idx1=IDX2(i-1,log2len,0);
         int idx2=idx1 | delta;
+        int j=0;//assert(1==0);
         do{
             elts[idx0]=combiner(elts+idx1,elts+idx2);
             ++idx0;
             ++idx1;
             ++idx2;
+            ++j;
         }while(idx0<lim);
         ++i;
         delta *= 2;
@@ -82,20 +98,20 @@ void intersectNonempty(uint8_t* tblOut,uint8_t* tblIn,int len,int log2len,int de
     formTable(tblOut,len,log2len,depth,AND_LAMBDA);
 }
 
-inline void formFwdTable(uint8_t* elts,int len,int log2len,int depth) {
+/*inline*/ void formFwdTable(uint8_t* elts,int len,int log2len,int depth) {
     formTable(elts,len,depth,log2len,MIN_LAMBDA);
 }
 
 
-inline void formBwdTable(uint8_t* elts,int len,int log2len,int depth) {
+/*inline*/ void formBwdTable(uint8_t* elts,int len,int log2len,int depth) {
     formTable(elts,len,depth,log2len,MAX_LAMBDA);
 }
 
-inline void formUnionTable(uint8_t* elts,int len,int log2len,int depth) {
+/*inline*/ void formUnionTable(uint8_t* elts,int len,int log2len,int depth) {
     formTable(elts,len,depth,log2len,OR_LAMBDA);
 }
 
-inline void formIntersectTable(uint8_t* elts,int len,int log2len,int depth) {
+/*inline*/ void formIntersectTable(uint8_t* elts,int len,int log2len,int depth) {
     formTable(elts,len,depth,log2len,AND_LAMBDA);
 }
 

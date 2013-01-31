@@ -3,6 +3,7 @@
 
 #include "smallBitvectors.h"
 #include <algorithm>
+#include <iostream>
 
 typedef uint8_t __attribute__((vector_size(16))) U8V;
 
@@ -28,8 +29,11 @@ struct SplitIdx {
         int depth=log2T[end-start];
         i[0]=IDX2(depth,log2len,start);
         i[1]=IDX2(depth,log2len,end-(1<<depth));
+        std::cerr<<"SIdx "<<start<<" "<<end<<"->"<<depth<<" "<<i[0]<<" "<<i[1]<<"\n";
     }
 };
+
+void displayTable(uint8_t* tbl,int len,int log2len);
 
 void formFwdTable(uint8_t *elts,int len,int log2len,int depth);
 
@@ -40,11 +44,15 @@ void formUnionTable(uint8_t *elts,int len,int log2len,int depth);
 void formIntersectTable(uint8_t *elts,int len,int log2len,int depth);
 
 // ====== accessor functions ==============================
+//scalar version
 template<typename F>
 inline uint8_t valueOverRange(uint8_t* tbl,SplitIdx idx,F combiner) {
+    std::cerr<<"ACC "<<idx.i[0]<<":"<<int(*(tbl+idx.i[0]))<<" "<<idx.i[1]<<":"<<int(*(tbl+idx.i[1]))
+             <<"->"<<(int)(combiner(tbl+idx.i[0],tbl+idx.i[1]))<<"\n";
     return combiner(tbl+idx.i[0],tbl+idx.i[1]);
 }
 
+//vector version
 template<typename F>
 inline U8V valueOverRangeV(uint8_t* tbl,SplitIdx idx,F combiner) {
     return combiner(tbl+idx.i[0],tbl+idx.i[1]);
@@ -69,7 +77,26 @@ inline uint8_t minValueOverRange(uint8_t *tbl,SplitIdx idx) {
 inline bool equalRestrictRange(uint8_t *tblU,uint8_t *tblI,SplitIdx idx,uint8_t restriction) {
     return (orValueOverRange(tblU,idx) & restriction) == (andValueOverRange(tblI,idx) & restriction);
 }
+inline uint8_t andValueOverRangeV(uint8_t *tbl,SplitIdx idx) {
+    return valueOverRange(tbl,idx,AND_LAMBDA);
+}
 
+inline uint8_t orValueOverRangeV(uint8_t *tbl,SplitIdx idx) {
+    return valueOverRange(tbl,idx,OR_LAMBDA);
+}
+
+inline uint8_t maxValueOverRangeV(uint8_t *tbl,SplitIdx idx) {
+    return valueOverRange(tbl,idx,MAX_LAMBDA);
+}
+
+inline uint8_t minValueOverRangeV(uint8_t *tbl,SplitIdx idx) {
+    return valueOverRange(tbl,idx,MIN_LAMBDA);
+}
+#if 0
+inline bool equalRestrictRange(uint8_t *tblU,uint8_t *tblI,SplitIdx idx,uint8_t restriction) {
+    return (orValueOverRange(tblU,idx) & restriction) == (andValueOverRange(tblI,idx) & restriction);
+}
+#endif
 // ============= range properties specific to the array compiler ==============
 class RangeProperties {
 public:
