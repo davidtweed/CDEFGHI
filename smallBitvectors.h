@@ -3,6 +3,7 @@
 
 #include <stdint.h>
 
+typedef uint8_t U8;
 typedef uint32_t SBitvector;
 
 inline SBitvector cup(SBitvector a,SBitvector b) { return a | b; }

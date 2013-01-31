@@ -2,11 +2,11 @@
 #include <iostream>
 #include <string.h>
 
-typedef uint8_t (*CombineFn)(uint8_t *tbl,SplitIdx idx);
-typedef uint8_t (*BasicCombineFn)(uint8_t*,uint8_t*);
-typedef uint8_t Any;
+typedef U8 (*CombineFn)(U8 *tbl,SplitIdx idx);
+typedef U8 (*BasicCombineFn)(U8*,U8*);
+typedef U8 Any;
 void
-generateRandomU8Table(uint8_t *tbl,int sz,int seed)
+generateRandomU8Table(U8 *tbl,int sz,int seed)
 {
     int i;
     for(i=0;i<sz;++i){
@@ -15,7 +15,7 @@ generateRandomU8Table(uint8_t *tbl,int sz,int seed)
 }
 
 int
-exhaustiveTest(const char* const msg,uint8_t *tbl,int len,CombineFn fastFn,BasicCombineFn baseFn) {
+exhaustiveTest(const char* const msg,U8 *tbl,int len,CombineFn fastFn,BasicCombineFn baseFn) {
     int log2len=int(log2T[len]);
     int sLen,i,j,k;
     int errorCount=0,tried=0;
@@ -25,12 +25,12 @@ exhaustiveTest(const char* const msg,uint8_t *tbl,int len,CombineFn fastFn,Basic
             ++tried;
             //do slow evaluation
             j=i+sLen;
-            uint8_t v=tbl[i];
+            U8 v=tbl[i];
             for(k=i+1;k<j;++k){
                 v=baseFn(static_cast<Any*>(&v),static_cast<Any*>(tbl+k));
             }
             SplitIdx idx(log2len,i,j);
-            uint8_t v2=fastFn(tbl,idx);
+            U8 v2=fastFn(tbl,idx);
             if(v!=v2){
                 std::cerr<<msg<<": Fail "<<i<<" "<<j<<": "<<static_cast<int>(v)<<" got "<<static_cast<int>(v2)<<"\n";
                 ++errorCount;
@@ -48,7 +48,7 @@ errorCount+=exhaustiveTest(m,tbl,len,f,l)
 
 int
 main(int argc,char* argv[]) {
-    uint8_t tbl[256*8];
+    U8 tbl[256*8];
     memset(tbl,0,256*8*sizeof(char));
     int len=16/*256*/;
     int log2len=log2T[len];

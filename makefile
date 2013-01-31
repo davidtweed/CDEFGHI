@@ -1,7 +1,7 @@
 GPP=/usr/local/bin/g++
 CXXOPTS=-g --std=c++11 -msse -msse2 -mssse3
 DEFS=-D__STDC_LIMIT_MACROS -D__STDC_CONSTANT_MACROS
-HEADERS=arrayElisionBuilder.h linearRangeProperties.h
+HEADERS=arrayElisionBuilder.h linearRangeProperties.h smallBitvectors.h
 OBJS=arrayElisionBuilder.o linearRangeProperties.o
 LIBS=
 

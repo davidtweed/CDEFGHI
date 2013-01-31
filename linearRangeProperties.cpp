@@ -20,7 +20,7 @@ int log2T[256]={0, 0, 1, 1, 2, 2, 2, 2, 3, 3, 3, 3, 3, 3, 3, 3,
 //union(A_i,...,A_j) == intersection(A_i,...,A_j). This is useful because unions can
 //be precomputed whereas direct equality tests can't (quite).
 
-void displayTable(uint8_t* tbl,int len,int log2len) {
+void displayTable(U8* tbl,int len,int log2len) {
     int d,i;
     for(d=0;d<log2T[len];++d){
         std::cerr<<"D"<<d<<"    ";
@@ -93,29 +93,29 @@ void formTable2(T* elts1,T* elts2,int len,int log2len,int depth,F1 combiner1,F2 
     }while(i<depth);
 }
 
-void intersectNonempty(uint8_t* tblOut,uint8_t* tblIn,int len,int log2len,int depth) {
-    preprocessIndividuals(tblOut,tblIn,len,[] (uint8_t a) { return a==0?0xFF:a;  } );
+void intersectNonempty(U8* tblOut,U8* tblIn,int len,int log2len,int depth) {
+    preprocessIndividuals(tblOut,tblIn,len,[] (U8 a) { return a==0?0xFF:a;  } );
     formTable(tblOut,len,log2len,depth,AND_LAMBDA);
 }
 
-/*inline*/ void formFwdTable(uint8_t* elts,int len,int log2len,int depth) {
+/*inline*/ void formFwdTable(U8* elts,int len,int log2len,int depth) {
     formTable(elts,len,depth,log2len,MIN_LAMBDA);
 }
 
 
-/*inline*/ void formBwdTable(uint8_t* elts,int len,int log2len,int depth) {
+/*inline*/ void formBwdTable(U8* elts,int len,int log2len,int depth) {
     formTable(elts,len,depth,log2len,MAX_LAMBDA);
 }
 
-/*inline*/ void formUnionTable(uint8_t* elts,int len,int log2len,int depth) {
+/*inline*/ void formUnionTable(U8* elts,int len,int log2len,int depth) {
     formTable(elts,len,depth,log2len,OR_LAMBDA);
 }
 
-/*inline*/ void formIntersectTable(uint8_t* elts,int len,int log2len,int depth) {
+/*inline*/ void formIntersectTable(U8* elts,int len,int log2len,int depth) {
     formTable(elts,len,depth,log2len,AND_LAMBDA);
 }
 
-void formUITable(uint8_t* eltsU,uint8_t* eltsI,int len,int log2len,int depth) {
+void formUITable(U8* eltsU,U8* eltsI,int len,int log2len,int depth) {
     formTable2(eltsU,eltsI,len,depth,log2len,OR_LAMBDA,AND_LAMBDA);
 }
 
