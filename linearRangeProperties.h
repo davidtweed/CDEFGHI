@@ -4,8 +4,10 @@
 #include "smallBitvectors.h"
 #include <algorithm>
 #include <iostream>
+#include <emmintrin.h>
 
-typedef uint8_t __attribute__((vector_size(16))) U8V;
+//typedef uint8_t __attribute__((vector_size(16))) U8V;
+typedef __m128i U8V;
 
 //macros just so literally used at call-site, increasing chance of being totally inlined
 #define AND_LAMBDA [] (U8 *x,U8 *y) -> U8 { return *x & *y;}
@@ -13,7 +15,7 @@ typedef uint8_t __attribute__((vector_size(16))) U8V;
 #define MIN_LAMBDA [] (U8 *x,U8 *y) -> U8 { return std::min(*x,*y);}
 #define MAX_LAMBDA [] (U8 *x,U8 *y) -> U8 { return std::max(*x,*y);}
 
-#define AND_LAMBDAV [] (U8 *x,U8 *y) -> U8V { return U8V();/**x & *y*/;}
+#define AND_LAMBDAV [] (U8 *x,U8 *y) -> U8V { return _mm_loadu_si128((U8V*)x) & _mm_loadu_si128((U8V*)y);}
 #define OR_LAMBDAV [] (U8 *x,U8 *y) -> U8V { return U8V();/**x | *y*/;}
 #define MIN_LAMBDAV [] (U8 *x,U8 *y) -> U8V { return U8V();/*std::min(*x,*y)*/;}
 #define MAX_LAMBDAV [] (U8 *x,U8 *y) -> U8V { return U8V();/*std::max(*x,*y)*/;}
@@ -55,7 +57,7 @@ inline U8 valueOverRange(U8* tbl,SplitIdx idx,F combiner) {
 //vector version
 template<typename F>
 inline U8V valueOverRangeV(U8* tbl,SplitIdx idx,F combiner) {
-    return combiner(tbl+idx.i[0],tbl+idx.i[1]);
+    return combiner(_mm_loadu_si128((U8V*)(tbl+idx.i[0])) & _mm_loadu_si128((U8V*)(tbl+idx.i[0]));t
 }
 
 inline U8 andValueOverRange(U8 *tbl,SplitIdx idx) {
