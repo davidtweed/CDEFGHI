@@ -19,6 +19,8 @@ BLK(SINT,0);BLK(UINT,1);BLK(FLOAT,2);BLK(BOOL,3);
 BLK(SCALAR1,0);BLK(VECTOR2,1);BLK(VECTOR4,2);BLK(VECTOR8,3);BLK(VECTOR16,4);BLK(VECTOR32,5);
 #undef SHIFT_AMT
 
+EltType L_U8T=UINT | 8;
+
 //"SWITCH-OP" macros
 //"X-macros" kind of thing
 #define SO2(x,t1,f1,t2,f2) SO(x,t1,f1);SO(x,t2,f2)
@@ -82,6 +84,33 @@ Type* llvmType(EltType e) {
     return typeDB[fundamentalTypeCode(e)][e&7];
 }
 
+ArrRec::ArrRec() {
+
+}
+
+ArrRec::ArrRec(Value * sbasePtr,int stype,int snoDims,int8_t[] sidxToExtent,int8_t[] ssizes,int8_t sallocd,
+             char* sname,Value *stranslations=0) {
+    setup(sbasePtr,stype,snoDims,sidxToExtent,ssizes,sallocd,sname,stranslations);
+}
+
+~ArrRec() {
+    free(name);
+    delete sbasePtr;
+    delete translations;
+}
+
+void ArrRec::setup(Value * sbasePtr,int stype,int snoDims,int8_t[] sidxToExtent,int8_t[] ssizes,int8_t sallocd,
+                   char* sname,Value *stranslations=0) {
+    basePtr=sbasePtr;
+    type=stype;
+    noDims=snoDims;
+    memcpy(idxToExtent,sidxToExtent,noDims*sizeof(int8_t));
+    memcpy(sizes,ssizes,noDims*sizeof(int8_t));
+    memcpy(allocd,sallocd,noDims*sizeof(int8_t));
+    name=strdup(sname);
+    translations=stranslations;
+}
+
 
 //matches formulae used in ref() in array.jl
 int idxsToLinear(LLCompilerState& gs,ArrRec *arrRec,int *idxs) {
@@ -143,10 +172,18 @@ Value* createGEP(LLCompilerState& gs,EltType t,ProblemState &ps,int arrNo,TinyMa
     return gs.builder->CreateGEP(ps.arrays->basePtr,ArrayRef<Value*>(indexes));
 }
 
+//supports undoing canonical compression
 Value* loadValueFromArraySlot(LLCompilerState& gs,EltType t,ProblemState &ps,int arrNo,TinyMap<int8_t,Value*> &idxs) {
-    return gs.builder->CreateLoad(createGEP(gs,t,ps,arrNo,idxs));
+    bool isCompressed=ps.arrays->translations!=0;
+    Value* readValue=gs.builder->CreateLoad(createGEP(gs,(isCompressed?L_U8T:t),ps,arrNo,idxs));
+    if(isCompressed){//undo canonical compression. note no attempt to bounds check.
+        Value* indexes[2]={CST(0),readValue};
+        readValue=gs.builder->CreateLoad(gs.builder->CreateGEP(ps.arrays->translations,ArrayRef<Value*>(indexes)));
+    }
+    return readValue;
 }
 
+//does NOT support redoing canonical compression
 Value* storeValueToArraySlot(LLCompilerState& gs,EltType t,ProblemState &ps,int arrNo,TinyMap<int8_t,Value*> &idxs,Value* value) {
     return gs.builder->CreateStore(createGEP(gs,t,ps,arrNo,idxs),value);
 }

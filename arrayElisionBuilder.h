@@ -69,10 +69,18 @@ const int LO=0;
 const int HI=1;
 const int DIM=2;
 
-//difference between sizes and allocd can arise from "where" clauses
+//difference between sizes and allocd can arise from "where" clauses and possible "cache avoidance" padding
 //probably difficult to alloc more than 2^32 floats on desktop machine, but maybe with mmap on an SSD...
-struct ArrRec {
+//canonical compression is supported only into U8 storage at the moment
+class ArrRec {
+public:
+    ArrRec();
+    ArrRec(Value * sbasePtr,int stype,int snoDims,int8_t[] sidxToExtent,int8_t[] ssizes,int8_t sallocd,
+	   char* name,Value *stranslations=0);
+    void setup(Value * sbasePtr,int stype,int snoDims,int8_t[] sidxToExtent,int8_t[] ssizes,int8_t sallocd,
+               char* sname,Value *stranslations=0);
     Value *basePtr;
+    Value* translations; //normally null, but some arrays may be stored "canonically compressed"
     char *name;
     int8_t idxToExtent[MAX_ARR_DIMS];
     int8_t sizes[MAX_ARR_DIMS];
