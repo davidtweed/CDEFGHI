@@ -88,19 +88,15 @@ ArrRec::ArrRec() {
 
 }
 
-ArrRec::ArrRec(Value * sbasePtr,int stype,int snoDims,int8_t[] sidxToExtent,int8_t[] ssizes,int8_t sallocd,
-             char* sname,Value *stranslations=0) {
-    setup(sbasePtr,stype,snoDims,sidxToExtent,ssizes,sallocd,sname,stranslations);
-}
 
-~ArrRec() {
+ArrRec::~ArrRec() {
     free(name);
-    delete sbasePtr;
+    delete basePtr;
     delete translations;
 }
 
-void ArrRec::setup(Value * sbasePtr,int stype,int snoDims,int8_t[] sidxToExtent,int8_t[] ssizes,int8_t sallocd,
-                   char* sname,Value *stranslations=0) {
+void ArrRec::setup(Value * sbasePtr,int stype,int snoDims,int8_t sidxToExtent[],int8_t ssizes[],int8_t sallocd[],
+                   char* sname,Value *stranslations) {
     basePtr=sbasePtr;
     type=stype;
     noDims=snoDims;
@@ -942,34 +938,3 @@ void extentPropagate(ProblemState &ps,ExpPtr *root) {
 /*Exp* is a DAG, so need to assign llvmTemp in process.
  *Also MUST return if llvmTemp set since other node content may not be valid.
  */
-void test() {
-
-}
-#define S(X) printf("Sizeof %s=%d\n",#X,sizeof(X));
-int main(int argc,char* argv[]) {
-    S(Exp);
-    S(ExpPtr);
-    S(Exp*);
-    S(VarRec);
-    S(UFnApp);
-    S(Combiner);
-    S(Traversal);
-#if 1
-//very simple test code
-    ExpPtr AAP(new NumLiteral(double(2))/*0*/),BAP(new NumLiteral(double(2))/*0*/),CAP(new NumLiteral(double(2))/*0*/);
-    ExpPtr UAP(new NumLiteral(double(2)));
-    ExpPtr VAP(new Combiner(MULTIPLY,FLOAT|W64,AAP,AAP));
-    ExpPtr WAP(new Combiner(ADD,FLOAT|W64,AAP,BAP));
-    ExpPtr XAP(new Combiner(MULTIPLY,FLOAT|W64,BAP,CAP));
-    ExpPtr YAP(new Combiner(SUBTRACT,FLOAT|W64,AAP,WAP));
-    ExpPtr ZAP(new Combiner(DIVIDE,FLOAT|W64,XAP,YAP));
-    ExpPtr SAP(new Combiner(MULTIPLY,FLOAT|W64,VAP,VAP));
-    ExpPtr TAP(new Combiner(ADD,FLOAT|W64,SAP,UAP));
-    DisplayRec dr;
-    dr.ps=0;
-    dr.s=&std::cout;
-    ZAP->recVisitorBase(&Exp::displayBase,&dr);
-#endif
-    return 0;
-}
-

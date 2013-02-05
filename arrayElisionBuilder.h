@@ -10,12 +10,12 @@
 #include "llvm/Intrinsics.h"
 #include "llvm/PassManager.h"
 #include "llvm/Analysis/Verifier.h"
-#include "llvm/Analysis/DebugInfo.h"
-#include "llvm/Analysis/DIBuilder.h"
-#include "llvm/Target/TargetData.h"
+#include "llvm/DebugInfo.h"
+#include "llvm/DIBuilder.h"
+//#include "llvm/Target/TargetData.h"
 #include "llvm/Target/TargetOptions.h"
 #include "llvm/Transforms/Scalar.h"
-#include "llvm/Support/IRBuilder.h"
+#include "llvm/IRBuilder.h"
 #include "llvm/Support/TargetSelect.h"
 #include <vector>
 #include <stdlib.h>
@@ -75,9 +75,12 @@ const int DIM=2;
 class ArrRec {
 public:
     ArrRec();
-    ArrRec(Value * sbasePtr,int stype,int snoDims,int8_t[] sidxToExtent,int8_t[] ssizes,int8_t sallocd,
-	   char* name,Value *stranslations=0);
-    void setup(Value * sbasePtr,int stype,int snoDims,int8_t[] sidxToExtent,int8_t[] ssizes,int8_t sallocd,
+    ArrRec(Value * sbasePtr,int stype,int snoDims,int8_t sidxToExtent[],int8_t ssizes[],int8_t sallocd[],
+	   char* sname,Value *stranslations=0) {
+        setup(sbasePtr,stype,snoDims,sidxToExtent,ssizes,sallocd,sname,stranslations);
+    }
+    ~ArrRec();
+    void setup(Value * sbasePtr,int stype,int snoDims,int8_t sidxToExtent[],int8_t ssizes[],int8_t sallocd[],
                char* sname,Value *stranslations=0);
     Value *basePtr;
     Value* translations; //normally null, but some arrays may be stored "canonically compressed"
