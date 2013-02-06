@@ -1,4 +1,5 @@
 #include "arrayElisionBuilder.h"
+#include "llvm/Intrinsics.h"
 #include <iostream>
 
 #define STRINGIFY(x) #x
@@ -28,8 +29,7 @@ EltType L_U8T=UINT | 8;
 //switch-op-default type ordering
 #define SOD3(x,f1,f2,f3) SO3(x,UINT,f1,SINT,f2,FLOAT,f3)
 
-bool
-newValueInIdxSet(Bitmask oldValue,Bitmask newValue) {
+bool newValueInIdxSet(Bitmask oldValue,Bitmask newValue) {
     return (newValue & (~oldValue))!=0;
 }
 
@@ -155,9 +155,9 @@ Value* idxsToLinearSymbolic(LLCompilerState& gs,ProblemState &ps,int arrNo,TinyM
         Value *mul=CST(1);
         int i;
         for(i=1;i<ps.arrays->noDims;++i){
-            mul=gs.builder->CreateMul(mul,CST(ps.arrays->idxToExtent[i]));
+            mul=gs.IRB->CreateMul(mul,CST(ps.arrays->idxToExtent[i]));
             Value *id=getIdxValue(gs,ps,arrNo,idxs,i);
-            v=gs.builder->CreateAdd(v,gs.builder->CreateMul(id,mul));
+            v=gs.IRB->CreateAdd(v,gs.IRB->CreateMul(id,mul));
         }
     }
     return v;
@@ -165,23 +165,23 @@ Value* idxsToLinearSymbolic(LLCompilerState& gs,ProblemState &ps,int arrNo,TinyM
 
 Value* createGEP(LLCompilerState& gs,EltType t,ProblemState &ps,int arrNo,TinyMap<int8_t,Value*> &idxs) {
     Value* indexes[2]={CST(0),idxsToLinearSymbolic(gs,ps,arrNo,idxs)};
-    return gs.builder->CreateGEP(ps.arrays->basePtr,ArrayRef<Value*>(indexes));
+    return gs.IRB->CreateGEP(ps.arrays->basePtr,ArrayRef<Value*>(indexes));
 }
 
 //supports undoing canonical compression
 Value* loadValueFromArraySlot(LLCompilerState& gs,EltType t,ProblemState &ps,int arrNo,TinyMap<int8_t,Value*> &idxs) {
     bool isCompressed=ps.arrays->translations!=0;
-    Value* readValue=gs.builder->CreateLoad(createGEP(gs,(isCompressed?L_U8T:t),ps,arrNo,idxs));
+    Value* readValue=gs.IRB->CreateLoad(createGEP(gs,(isCompressed?L_U8T:t),ps,arrNo,idxs));
     if(isCompressed){//undo canonical compression. note no attempt to bounds check.
         Value* indexes[2]={CST(0),readValue};
-        readValue=gs.builder->CreateLoad(gs.builder->CreateGEP(ps.arrays->translations,ArrayRef<Value*>(indexes)));
+        readValue=gs.IRB->CreateLoad(gs.IRB->CreateGEP(ps.arrays->translations,ArrayRef<Value*>(indexes)));
     }
     return readValue;
 }
 
 //does NOT support redoing canonical compression
 Value* storeValueToArraySlot(LLCompilerState& gs,EltType t,ProblemState &ps,int arrNo,TinyMap<int8_t,Value*> &idxs,Value* value) {
-    return gs.builder->CreateStore(createGEP(gs,t,ps,arrNo,idxs),value);
+    return gs.IRB->CreateStore(createGEP(gs,t,ps,arrNo,idxs),value);
 }
 
 /*take an array record, a group of master indexs to index into it in order and a group
@@ -190,10 +190,10 @@ Value* storeValueToArraySlot(LLCompilerState& gs,EltType t,ProblemState &ps,int 
  */
 void getActualIdxs(Value **output,LLCompilerState& gs,ArrRec *r,int8_t *masterIdxs,int8_t *deltas) {
     int i;
-    for(i=0;i<r->noDims;++r){
+    for(i=0;i<r->noDims;++i){
         output[i]=gs.curIdxVars[masterIdxs[i]];
         if(deltas[i]!=0){ //need to modify the index
-            output[i]=gs.builder->CreateAdd(output[i],CST(deltas[i]));
+            output[i]=gs.IRB->CreateAdd(output[i],CST(deltas[i]));
         }
     }
 }
@@ -244,7 +244,7 @@ Value* makeLLVMBinOp(LLCompilerState &gs,Operation op,EltType type,Value **args)
     //binary operations -------------------------------------------------
     Value *a1=args[1];
     if(opArity[op]==2){
-#define SO(baseOp,typeInfo,llvmMFn) case (baseOp|typeInfo): return gs.builder->llvmMFn(a0,a1)
+#define SO(baseOp,typeInfo,llvmMFn) case (baseOp|typeInfo): return gs.IRB->llvmMFn(a0,a1)
         switch(op | (type & 0xB0)) {
             //"regular" operations
             SOD3(BOR,CreateOr,CreateOr,CreateOr);
@@ -273,7 +273,7 @@ Value* makeLLVMBinOp(LLCompilerState &gs,Operation op,EltType type,Value **args)
             //SO(ADD,0,CreateAdd);
             //really irregular expressions
 #undef SO
-#define SO(nm,ty,op) case CC(nm,ty): return gs.builder->CreateSelect(gs.builder->op(a0,a1),a0,a1)
+#define SO(nm,ty,op) case CC(nm,ty): return gs.IRB->CreateSelect(gs.IRB->op(a0,a1),a0,a1)
             SOD3(MIN,CreateICmpULT,CreateICmpSLT,CreateFCmpOLT);
             SOD3(MAX,CreateICmpUGT,CreateICmpSGT,CreateFCmpOGT);
 #undef SO
@@ -284,8 +284,8 @@ Value* makeLLVMBinOp(LLCompilerState &gs,Operation op,EltType type,Value **args)
     Value *a2=args[2];
     if(opArity[op]==3){
         switch(op){
-        case SELECT: return gs.builder->CreateSelect(a0,a1,a2);
-        case FMA: return gs.builder->CreateSelect(a0,a1,a2);
+        case SELECT: return gs.IRB->CreateSelect(a0,a1,a2);
+        case FMA: return gs.IRB->CreateSelect(a0,a1,a2);
         }
         panic_if(1,"unhandled ternary operator",op);
     }
@@ -316,7 +316,7 @@ void Exp::wipeLLVM(void*) {
 }
 
 void Exp::displayBase(void *opaque) {
-    std::ostream *s=((DisplayRec*)opaque)->s;
+    std::ostream *s=((ProblemState*)opaque)->s;
     *s<<"(";
     display(opaque); //call virtual function
     *s<<")";
@@ -340,7 +340,7 @@ Exp* Collection::childSatisfies(EPred pred,void* opaque) {
 
 }
 
-Value* Collection::generateSpecific(LLCompilerState& global) {
+Value* Collection::generateSpecific(LLCompilerState& global,ProblemState &ps) {
 
 }
 
@@ -353,7 +353,7 @@ Value* Collection::outputNodeIfSpecific(LLCompilerState &gs,ProblemState &ps,Loo
 }
 
 void Collection::display(void* opaque) {
-    std::ostream *s=((DisplayRec*)opaque)->s;
+    std::ostream *s=((ProblemState*)opaque)->s;
     *s<<"Collection";
 }
 
@@ -432,7 +432,7 @@ Exp* NumLiteral::childSatisfies(EPred pred,void* opaque) {
 }
 
 Value*
-NumLiteral::generateSpecific(LLCompilerState& global) {
+NumLiteral::generateSpecific(LLCompilerState& global,ProblemState &ps) {
 
 }
 
@@ -442,7 +442,7 @@ NumLiteral::wipeSpecific(void*) {
 }
 
 void NumLiteral::display(void* opaque) {
-    std::ostream *s=((DisplayRec*)opaque)->s;
+    std::ostream *s=((ProblemState*)opaque)->s;
     *s<<"Lit";
     if(type==FLOAT){
         *s<<"Double "<<fMem;
@@ -476,7 +476,7 @@ Exp* RandArr::childSatisfies(EPred pred,void* opaque) {
     return 0;
 }
 
-Value* RandArr::generateSpecific(LLCompilerState& global) {
+Value* RandArr::generateSpecific(LLCompilerState& global,ProblemState &ps) {
 
 }
 
@@ -485,7 +485,7 @@ void RandArr::wipeSpecific(void*) {
 }
 
 void RandArr::display(void* opaque) {
-    std::ostream *s=((DisplayRec*)opaque)->s;
+    std::ostream *s=((ProblemState*)opaque)->s;
     *s<<"RandomArr";
 }
 
@@ -591,7 +591,7 @@ Value* typeConvert(LLCompilerState &gs,EltType outT,Value *v,EltType inT) {
         return v;
     }
 #define CC(oT,iT,rs) ((rs<<4)|(fundamentalTypeCode(oT)<<2)|fundamentalTypeCode(iT))
-#define OP(oT,iT,rs,fn) case CC(oT,iT,rs): return gs.builder->fn(v,llvmType(outT))
+#define OP(oT,iT,rs,fn) case CC(oT,iT,rs): return gs.IRB->fn(v,llvmType(outT))
 #define OP2(oT,iT,fn) OP(oT,iT,SAME,fn); OP(oT,iT,SMALLER,fn); OP(oT,iT,LARGER,fn)
     int relSz=(outT & 7)==(inT & 7)?0:((outT & 7)>(inT & 7)?1:2);
     int vecRelSz=0;//outT.bits==inT.bits?0:(outT.bits>inT.bits?1:2);
@@ -621,22 +621,22 @@ Value* typeConvert(LLCompilerState &gs,EltType outT,Value *v,EltType inT) {
     panic_if(1,"unhandled type conversion",outT);
 }
 
-Value* Exp::generateCode(LLCompilerState& gs) {
+Value* Exp::generateCode(LLCompilerState& gs,ProblemState &ps) {
     if(llvmTemp!=0){
         return llvmTemp;
     }
-    Value *rv=generateSpecific(gs);
+    Value *rv=generateSpecific(gs,ps);
     if(output!=0){
         Value* actualIdxs[LLCompilerState::MAX_RANGES];
         getActualIdxs(actualIdxs,gs,output->r,output->idxs,output->deltas);
-        storeValueToArraySlot(gs,type,output->r,actualIdxs,rv);
+        storeValueToArraySlot(gs,type,ps,output->r,actualIdxs,rv);
     }
     return rv;
 }
 
-Value* VarRec::generateSpecific(LLCompilerState& gs) {
+Value* VarRec::generateSpecific(LLCompilerState& gs,ProblemState &ps) {
     int type;
-    return loadValueFromArraySlot(gs,type,0,0);
+    return loadValueFromArraySlot(gs,type,ps,0,0);
 }
 
 void VarRec::wipeSpecific(void*) {
@@ -644,7 +644,7 @@ void VarRec::wipeSpecific(void*) {
 }
 
 void VarRec::display(void* opaque) {
-    std::ostream *s=((DisplayRec*)opaque)->s;
+    std::ostream *s=((ProblemState*)opaque)->s;
     *s<<"VarRec "<<r->name;
     if(noIdxs>0){
         *s<<".";
@@ -671,7 +671,7 @@ void VarRec::display(void* opaque) {
     }
 }
 
-Value* UFnApp::generateSpecific(LLCompilerState& gs) {
+Value* UFnApp::generateSpecific(LLCompilerState& gs,ProblemState &ps) {
     return 0;
 }
 
@@ -680,16 +680,16 @@ void UFnApp::wipeSpecific(void*) {
 }
 
 void UFnApp::display(void* opaque) {
-    std::ostream *s=((DisplayRec*)opaque)->s;
+    std::ostream *s=((ProblemState*)opaque)->s;
     *s<<"UFnApp";
 }
 
-Value* Combiner::generateSpecific(LLCompilerState& gs) {
+Value* Combiner::generateSpecific(LLCompilerState& gs,ProblemState &ps) {
     Value *as[3];
     for(int i=0;i<opArity[operation];++i){
         //UGH: first argument of select is special case
         if(inputs[i]!=0 && !(i==0 && operation==SELECT)){
-            as[i]=typeConvert(gs,type,inputs[i]->generateCode(gs),inputs[i]->type);
+            as[i]=typeConvert(gs,type,inputs[i]->generateCode(gs,ps),inputs[i]->type);
         }
     }
     return makeLLVMBinOp(gs,operation,type,as);
@@ -701,7 +701,7 @@ void Combiner::wipeSpecific(void*) {
 }
 
 void Combiner::display(void* opaque) {
-    std::ostream *s=((DisplayRec*)opaque)->s;
+    std::ostream *s=((ProblemState*)opaque)->s;
     *s<<"Combiner "<<opNames[operation];
 }
 
@@ -719,23 +719,23 @@ Value* Traversal::generateInnermost(LLCompilerState& gs,int idx,TravDB &db) {
     const int loopLimit=gs.traversalRanges[gsIdx][1];
     const int loopStep=1; //do SIMD in future
     //write loop header-----------------------------------------------------------
-    Function *db.function=gs.builder->GetInsertBlock()->getParent();
-    BasicBlock *PreheaderBB=gs.builder->GetInsertBlock();
+    Function *db.function=gs.IRB->GetInsertBlock()->getParent();
+    BasicBlock *PreheaderBB=gs.IRB->GetInsertBlock();
     BasicBlock *headerLabel=BasicBlock::Create(getGlobalContext(),"loop",db.function);
-    gs.builder->CreateBr(headerLabel); //explicit jump from current block to LoopBB
-    gs.builder->SetInsertPoint(headerLabel); // Start insertion in headerLabel
+    gs.IRB->CreateBr(headerLabel); //explicit jump from current block to LoopBB
+    gs.IRB->SetInsertPoint(headerLabel); // Start insertion in headerLabel
     //actual phi nodes need to go right after branch in, but fill them in later
-    PHINode* PN=gs.builder->CreatePHI(Type::getInt32Ty(getGlobalContext()),2,"ctr");
-    Value *incCtr=gs.builder->CreateAdd(PN,CST(loopStep));
+    PHINode* PN=gs.IRB->CreatePHI(Type::getInt32Ty(getGlobalContext()),2,"ctr");
+    Value *incCtr=gs.IRB->CreateAdd(PN,CST(loopStep));
     std::vector<PHINode*> phis; //phi nodes for variables in accumulations
     for(auto it : accumulations){
-        phis.push_back(gs.builder->CreatePHI(llvmType(it->type),2));
+        phis.push_back(gs.IRB->CreatePHI(llvmType(it->type),2));
     }
     //write "main loop body" by traversing input vars-----------------------------
     for(auto it : body){
         it->generateCode(gs);
     }
-    BasicBlock *curBB=gs.builder->GetInsertBlock();
+    BasicBlock *curBB=gs.IRB->GetInsertBlock();
     PN->addIncoming(CST(loopStart),PreheaderBB);
     PN->addIncoming(incCtr,curBB);
     for(int acc=0;acc<accumulations.size();++acc){ //main body expressions
@@ -755,13 +755,13 @@ Value* Traversal::generateInnermost(LLCompilerState& gs,int idx,TravDB &db) {
     //write loop prologue---------------------------------------------------------
     BasicBlock *AfterBB=BasicBlock::Create(getGlobalContext(),"afterloop",db.function);
     // Insert the conditional branch into the end of LoopEndBB.
-    Value* loopCond=gs.builder->CreateICmpSLT(incCtr,CST(loopLimit),"cond");
-    gs.builder->CreateCondBr(loopCond,headerLabel,AfterBB);
+    Value* loopCond=gs.IRB->CreateICmpSLT(incCtr,CST(loopLimit),"cond");
+    gs.IRB->CreateCondBr(loopCond,headerLabel,AfterBB);
     // Any new code will be inserted in AfterBB.
-    gs.builder->SetInsertPoint(AfterBB);
+    gs.IRB->SetInsertPoint(AfterBB);
 }
 #endif
-Value* Traversal::generateSpecific(LLCompilerState& gs) {
+Value* Traversal::generateSpecific(LLCompilerState& gs,ProblemState &ps) {
 #if 0
     assert(noIdxs==1); //temporary
     int idx;
@@ -775,23 +775,23 @@ Value* Traversal::generateSpecific(LLCompilerState& gs) {
             Value *start=0;
         }
         //write loop header-----------------------------------------------------------
-        Function *TheFunction=gs.builder->GetInsertBlock()->getParent();
-        BasicBlock *PreheaderBB=gs.builder->GetInsertBlock();
+        Function *TheFunction=gs.IRB->GetInsertBlock()->getParent();
+        BasicBlock *PreheaderBB=gs.IRB->GetInsertBlock();
         BasicBlock *headerLabel=BasicBlock::Create(getGlobalContext(),"loop",TheFunction);
-        gs.builder->CreateBr(headerLabel); //explicit jump from current block to LoopBB
-        gs.builder->SetInsertPoint(headerLabel); // Start insertion in headerLabel
+        gs.IRB->CreateBr(headerLabel); //explicit jump from current block to LoopBB
+        gs.IRB->SetInsertPoint(headerLabel); // Start insertion in headerLabel
         //actual phi nodes need to go right after branch in, but fill them in later
-        PHINode* PN=gs.builder->CreatePHI(Type::getInt32Ty(getGlobalContext()),2,"ctr");
-        Value *incCtr=gs.builder->CreateAdd(PN,CST(loopStep));
+        PHINode* PN=gs.IRB->CreatePHI(Type::getInt32Ty(getGlobalContext()),2,"ctr");
+        Value *incCtr=gs.IRB->CreateAdd(PN,CST(loopStep));
         std::vector<PHINode*> phis; //phi nodes for variables in accumulations
         for(auto it : accumulations){
-            phis.push_back(gs.builder->CreatePHI(llvmType(it->type),2));
+            phis.push_back(gs.IRB->CreatePHI(llvmType(it->type),2));
         }
         //write "main loop body" by traversing input vars-----------------------------
         for(auto it : body){
             it->generateCode(gs);
         }
-        BasicBlock *curBB=gs.builder->GetInsertBlock();
+        BasicBlock *curBB=gs.IRB->GetInsertBlock();
         PN->addIncoming(CST(loopStart),PreheaderBB);
         PN->addIncoming(incCtr,curBB);
         for(int acc=0;acc<accumulations.size();++acc){ //main body expressions
@@ -811,13 +811,13 @@ Value* Traversal::generateSpecific(LLCompilerState& gs) {
         //write loop prologue---------------------------------------------------------
         BasicBlock *AfterBB=BasicBlock::Create(getGlobalContext(),"afterloop",TheFunction);
         // Insert the conditional branch into the end of LoopEndBB.
-        Value* loopCond=gs.builder->CreateICmpSLT(incCtr,CST(loopLimit),"cond");
-        gs.builder->CreateCondBr(loopCond,headerLabel,AfterBB);
+        Value* loopCond=gs.IRB->CreateICmpSLT(incCtr,CST(loopLimit),"cond");
+        gs.IRB->CreateCondBr(loopCond,headerLabel,AfterBB);
         // Any new code will be inserted in AfterBB.
-        gs.builder->SetInsertPoint(AfterBB);
+        gs.IRB->SetInsertPoint(AfterBB);
         if(addTiming){
-            Value *end=0;
-            Value *taken=gs.builder->CreateAdd(end,start);
+            Value *end=gs.IRB->CreateIntrinsic(Intrinsic::readcyclecounter);
+            Value *taken=gs.IRB->CreateSub(end,start);
             //TODO: reporting
         }
     }
@@ -836,7 +836,7 @@ void Traversal::wipeSpecific(void*) {
 }
 
 void Traversal::display(void* opaque) {
-    std::ostream *s=((DisplayRec*)opaque)->s;
+    std::ostream *s=((ProblemState*)opaque)->s;
     *s<<"Combiner";
 }
 
@@ -867,7 +867,7 @@ Value* Exp::outputNodeIf(LLCompilerState &gs,ProblemState &ps,LoopStatus &ls,uin
     }//otherwise nothing*/
 }
 
-Function* createFunctionFromDAG(LLCompilerState &gs,ExpPtr e,const char* const fnName) {
+Function* createFunctionFromDAG(LLCompilerState &gs,ProblemState &ps,ExpPtr e,const char* const fnName) {
     //generate function prologue ---------------------------------------------------
     // Make the function type:  double(double,double) etc.
     Function *TheFunction;
@@ -906,9 +906,9 @@ Function* createFunctionFromDAG(LLCompilerState &gs,ExpPtr e,const char* const f
     }
 #endif
     //generate the actual work instructions ----------------------------------------
-    e->generateCode(gs);
+    e->generateCode(gs,ps);
     //generate the function prologue -----------------------------------------------
-    gs.builder->CreateRet(CST(0)); // Finish off the function
+    gs.IRB->CreateRet(CST(0)); // Finish off the function
     if(gs.verbose){
         gs.TheModule->dump();
     }

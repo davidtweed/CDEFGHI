@@ -38,10 +38,10 @@ struct TraversalRange;
 class LLCompilerState {
 public:
     LLVMContext *TheLLVMContext;// = getGlobalContext();
-    IRBuilder<> *builder;//(getGlobalContext());
+    IRBuilder<> *IRB;//(getGlobalContext());
     bool nested_compile=false;
     Module *TheModule;
-    ExecutionEngine *TheExecutionEngine;
+    ExecutionEngine *ExecEngine;
     DIBuilder *dbuilder;
     FunctionPassManager *FPM;
     static const int MAX_RANGES=5;
@@ -99,15 +99,12 @@ struct ProblemState {
     int fstUnusedExtent;
     int noArrays;
     ArrRec* arrays;
+    std::ostream *s; //only non-null when doing debugging
 };
 struct LoopStatus {
     int depth;
     int globalExtents[MAX_ARR_DIMS];
     Value* inductionVars[MAX_ARR_DIMS];
-};
-struct DisplayRec {
-    ProblemState *ps;
-    std::ostream *s;
 };
 //loops are actually bivalued, with input:output indices
 //the
@@ -136,7 +133,7 @@ public:
     typedef void (Exp::*VFn)(void*); //pointer to member function
     Exp(uint8_t snodeType,EltType stype);
     virtual ~Exp();
-    virtual Value* generateSpecific(LLCompilerState& global) = 0;
+    virtual Value* generateSpecific(LLCompilerState& global,ProblemState &ps) = 0;
     virtual void wipeSpecific(void*) = 0;
     //precondition: tgtLoopBodyIdx>=loopBodyIdx
     virtual Value* outputNodeIfSpecific(LLCompilerState &gs,ProblemState &ps,LoopStatus &ls,uint8_t tgtLoopBodyIdx)=0;
@@ -149,7 +146,7 @@ public:
     Value* outputNodeIf(LLCompilerState &gs,ProblemState &ps,LoopStatus &ls,uint8_t tgtLoopBodyIdx);
     void wipeLLVM(void*);
     void displayBase(void *opaque);
-    Value* generateCode(LLCompilerState& global);
+    Value* generateCode(LLCompilerState& global,ProblemState &ps);
     VarRec *output;
     Value *llvmTemp;
     Bitmask idxsInKids; //bitmask of indexes used in child nodes
@@ -163,7 +160,7 @@ public:
     ~Collection();
     Exp* childSatisfies(EPred pred,void* opaque);
     void recVisitor(VFn vfn,void* opaque);
-    Value* generateSpecific(LLCompilerState& global);
+    Value* generateSpecific(LLCompilerState& global,ProblemState &ps);
     void wipeSpecific(void*);
     Value* outputNodeIfSpecific(LLCompilerState &gs,ProblemState &ps,LoopStatus &ls,uint8_t tgtLoopBodyIdx);
     void display(void* opaque);
@@ -178,7 +175,7 @@ public:
     ~NumLiteral();
     void recVisitor(VFn vfn,void* opaque);
     Exp* childSatisfies(EPred pred,void* opaque);
-    Value* generateSpecific(LLCompilerState& global);
+    Value* generateSpecific(LLCompilerState& global,ProblemState &ps);
     void wipeSpecific(void*);
     Value* outputNodeIfSpecific(LLCompilerState &gs,ProblemState &ps,LoopStatus &ls,uint8_t tgtLoopBodyIdx);
     void display(void* opaque);
@@ -211,7 +208,7 @@ public:
     ~VarRec();
     void recVisitor(VFn vfn,void* opaque);
     Exp* childSatisfies(EPred pred,void* opaque);
-    Value* generateSpecific(LLCompilerState& global);
+    Value* generateSpecific(LLCompilerState& global,ProblemState &ps);
     void wipeSpecific(void*);
     Value* outputNodeIfSpecific(LLCompilerState &gs,ProblemState &ps,LoopStatus &ls,uint8_t tgtLoopBodyIdx);
     void display(void* opaque);
@@ -228,7 +225,7 @@ public:
     ~RandArr();
     void recVisitor(VFn vfn,void* opaque);
     Exp* childSatisfies(EPred pred,void* opaque);
-    Value* generateSpecific(LLCompilerState& global);
+    Value* generateSpecific(LLCompilerState& global,ProblemState &ps);
     void wipeSpecific(void*);
     Value* outputNodeIfSpecific(LLCompilerState &gs,ProblemState &ps,LoopStatus &ls,uint8_t tgtLoopBodyIdx);
     void display(void* opaque);
@@ -242,7 +239,7 @@ public:
     UFnApp(ExpPtr sinput,void *sfnPtr,EltType stype);
     ~UFnApp();
     void recVisitor(VFn vfn,void* opaque);
-    Value* generateSpecific(LLCompilerState& global);
+    Value* generateSpecific(LLCompilerState& global,ProblemState &ps);
     void wipeSpecific(void*);
     Value* outputNodeIfSpecific(LLCompilerState &gs,ProblemState &ps,LoopStatus &ls,uint8_t tgtLoopBodyIdx);
     void display(void* opaque);
@@ -256,7 +253,7 @@ struct Combiner : public Exp {
     Combiner(Operation soperation,EltType stype,ExpPtr i0,ExpPtr i1=0,ExpPtr i2=0);
     ~Combiner();
     void recVisitor(VFn vfn,void* opaque);
-    Value* generateSpecific(LLCompilerState& global);
+    Value* generateSpecific(LLCompilerState& global,ProblemState &ps);
     void wipeSpecific(void*);
     Value* outputNodeIfSpecific(LLCompilerState &gs,ProblemState &ps,LoopStatus &ls,uint8_t tgtLoopBodyIdx);
     void display(void* opaque);
@@ -277,7 +274,7 @@ public:
     Traversal(Collection &sbody,Collection &saccumulations,EltType stype);
     ~Traversal();
     void recVisitor(VFn vfn,void* opaque);
-    Value* generateSpecific(LLCompilerState& global);
+    Value* generateSpecific(LLCompilerState& global,ProblemState &ps);
     void wipeSpecific(void*);
     Value* outputNodeIfSpecific(LLCompilerState &gs,ProblemState &ps,LoopStatus &ls,uint8_t tgtLoopBodyIdx);
     void display(void* opaque);

@@ -1,4 +1,4 @@
-#include "linearRangeProperties.h"
+#include "../linearRangeProperties.h"
 #include <iostream>
 #include <string.h>
 

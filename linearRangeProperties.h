@@ -54,12 +54,13 @@ inline U8 valueOverRange(U8* tbl,SplitIdx idx,F combiner) {
     return combiner(tbl+idx.i[0],tbl+idx.i[1]);
 }
 
+#if 0
 //vector version
 template<typename F>
 inline U8V valueOverRangeV(U8* tbl,SplitIdx idx,F combiner) {
-    return combiner(_mm_loadu_si128((U8V*)(tbl+idx.i[0])) & _mm_loadu_si128((U8V*)(tbl+idx.i[0]));t
+    return combiner(_mm_loadu_si128((U8V*)(tbl+idx.i[0])) & _mm_loadu_si128((U8V*)(tbl+idx.i[0]));
 }
-
+#endif
 inline U8 andValueOverRange(U8 *tbl,SplitIdx idx) {
     return valueOverRange(tbl,idx,AND_LAMBDA);
 }
@@ -79,6 +80,7 @@ inline U8 minValueOverRange(U8 *tbl,SplitIdx idx) {
 inline bool equalRestrictRange(U8 *tblU,U8 *tblI,SplitIdx idx,U8 restriction) {
     return (orValueOverRange(tblU,idx) & restriction) == (andValueOverRange(tblI,idx) & restriction);
 }
+#if 0
 inline U8V andValueOverRangeV(U8 *tbl,SplitIdx idx) {
     return valueOverRangeV(tbl,idx,AND_LAMBDAV);
 }
@@ -94,6 +96,7 @@ inline U8V maxValueOverRangeV(U8 *tbl,SplitIdx idx) {
 inline U8V minValueOverRangeV(U8 *tbl,SplitIdx idx) {
     return valueOverRangeV(tbl,idx,MIN_LAMBDAV);
 }
+#endif
 #if 0
 inline bool equalRestrictRange(U8 *tblU,U8 *tblI,SplitIdx idx,U8 restriction) {
     return (orValueOverRange(tblU,idx) & restriction) == (andValueOverRange(tblI,idx) & restriction);
